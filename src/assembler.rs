@@ -1034,4 +1034,34 @@ mod tests {
         assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
         assert_eq!(result.bytes, vec![0x44, 10, 0x01]);
     }
+
+    #[test]
+    fn test_led_blink_integration() {
+        use crate::cpu::{CpuState, Executor};
+
+        // Minimal LED blink test: load LED address, write value, halt
+        let code = r#"
+            la      r0, 0xFF0000    ; LED I/O address
+            lc      r1, 0x55        ; Value to write
+            sb      r1, 0(r0)       ; Write to LEDs
+        "#;
+
+        let mut asm = Assembler::new();
+        let result = asm.assemble(code);
+        assert!(result.errors.is_empty(), "Assembly errors: {:?}", result.errors);
+
+        let mut cpu = CpuState::new();
+        cpu.load_program(0, &result.bytes);
+
+        let executor = Executor::new();
+
+        // Execute the 3 instructions
+        for i in 0..3 {
+            let res = executor.step(&mut cpu);
+            assert!(matches!(res, crate::cpu::ExecuteResult::Ok), "Step {} failed: {:?}", i, res);
+        }
+
+        // Check LED value
+        assert_eq!(cpu.io.leds, 0x55, "LED value should be 0x55, got 0x{:02X}", cpu.io.leds);
+    }
 }

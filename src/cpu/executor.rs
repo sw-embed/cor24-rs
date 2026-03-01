@@ -2019,4 +2019,25 @@ mod tests {
 
         assert_eq!(cpu.get_reg(ra), 0xFFFFFF);
     }
+
+    // ========== LED I/O Test ==========
+
+    #[test]
+    fn test_sb_to_led() {
+        use crate::cpu::state::IO_LEDSWDAT;
+
+        let mut cpu = CpuState::new();
+        let executor = Executor::new();
+
+        // sb r1, 0(r0) where r0 = LED address, r1 = value
+        let (inst_byte, ra, rb) = find_any_instruction_byte(0x16).unwrap(); // Sb opcode
+        cpu.write_byte(0, inst_byte);
+        cpu.write_byte(1, 0x00); // offset = 0
+        cpu.set_reg(ra, 0x55); // Value to write to LEDs
+        cpu.set_reg(rb, IO_LEDSWDAT); // LED I/O address
+
+        executor.step(&mut cpu);
+
+        assert_eq!(cpu.io.leds, 0x55, "LED value should be 0x55");
+    }
 }
