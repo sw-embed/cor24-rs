@@ -284,6 +284,59 @@ cor24-emulator = { path = "../" }  # For testing
 3. **Indirect calls:** Support `call_indirect`? (tables)
 4. **Interrupts:** How does WASM code interact with COR24 interrupts?
 
+## Future: I2C and Sensor Simulation
+
+### Goal
+Demonstrate a complete embedded workflow: Rust driver → COR24 assembly → emulator with simulated I2C sensor.
+
+### Simulated Hardware
+- **BMP280/BME280** pressure/temperature sensor
+- Memory-mapped I2C controller at 0xFFFE00
+- Sensor connected at I2C address 0x76
+
+### I2C Controller Registers
+```
+0xFFFE00: I2C_DATA    - Read/write data byte
+0xFFFE01: I2C_STATUS  - Bit 0: busy, Bit 1: NACK, Bit 2: done
+0xFFFE02: I2C_CONTROL - Bit 0: start, Bit 1: stop, Bit 2: read/write
+0xFFFE03: I2C_ADDR    - 7-bit slave address
+```
+
+### 24-bit Challenges
+Sensors like BMP280 return 20-bit pressure readings in 3 bytes:
+- COR24 is 24-bit native, so raw ADC values fit
+- Compensation formulas use 32-bit math
+- Solution: Use 24-bit for raw data, implement 32-bit math in software or split calculations
+
+### Rust Driver Approach
+```rust
+#![no_std]
+
+pub fn read_pressure() -> u32 {
+    // Select pressure register
+    i2c_write(0x76, &[0xF7]);
+
+    // Read 3 bytes: MSB, LSB, XLSB
+    let mut buf = [0u8; 3];
+    i2c_read(0x76, &mut buf);
+
+    // Combine into 20-bit raw value
+    let raw = ((buf[0] as u32) << 12)
+            | ((buf[1] as u32) << 4)
+            | ((buf[2] as u32) >> 4);
+
+    // Apply compensation (simplified)
+    compensate_pressure(raw)
+}
+```
+
+### Implementation Steps
+1. Add I2C memory-mapped peripheral to emulator
+2. Implement BMP280 sensor simulation with realistic values
+3. Write Rust no_std I2C driver
+4. Compile to WASM → translate to COR24
+5. Run on emulator, display temperature/pressure readings
+
 ## References
 
 - [WASM Binary Format](https://webassembly.github.io/spec/core/binary/)

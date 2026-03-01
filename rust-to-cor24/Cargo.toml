@@ -14,4 +14,8 @@ anyhow = "1.0"
 name = "wasm2cor24"
 path = "src/main.rs"
 
+[[bin]]
+name = "cor24-run"
+path = "src/run.rs"
+
 [dev-dependencies]
