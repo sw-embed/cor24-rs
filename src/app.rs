@@ -238,19 +238,32 @@ pub fn app() -> Html {
                 for (i, &val) in regs.iter().enumerate().take(8) {
                     registers[i] = val;
                 }
-                let mut memory_snapshot = Vec::new();
-                for addr in (0xFFFFC0..=0xFFFFFF).step_by(1) {
-                    memory_snapshot.push(new_cpu.read_byte(addr as u32));
+                // Capture low memory (0x000000-0x00007F) - 128 bytes
+                let mut memory_low = Vec::new();
+                for addr in 0x000000..0x000080 {
+                    memory_low.push(new_cpu.read_byte(addr));
+                }
+                // Capture high memory (0xFFFF80-0xFFFFFF) - 128 bytes
+                let mut memory_high = Vec::new();
+                for addr in 0xFFFF80..=0xFFFFFF {
+                    memory_high.push(new_cpu.read_byte(addr as u32));
                 }
 
                 rust_cpu_state.set(RustCpuState {
                     registers,
+                    prev_registers: registers, // No changes on initial load
+                    prev_prev_registers: registers,
                     pc: new_cpu.get_pc(),
                     condition_flag: new_cpu.get_condition_flag(),
                     is_halted: new_cpu.is_halted(),
                     led_value: new_cpu.get_led_value(),
                     cycle_count: new_cpu.get_cycle_count(),
-                    memory_snapshot,
+                    memory_low: memory_low.clone(),
+                    memory_high: memory_high.clone(),
+                    prev_memory_low: memory_low.clone(),
+                    prev_memory_high: memory_high.clone(),
+                    prev_prev_memory_low: memory_low,
+                    prev_prev_memory_high: memory_high,
                     current_instruction: new_cpu.get_current_instruction(),
                     assembled_lines,
                 });
@@ -277,19 +290,32 @@ pub fn app() -> Html {
                 for (i, &val) in regs.iter().enumerate().take(8) {
                     registers[i] = val;
                 }
-                let mut memory_snapshot = Vec::new();
-                for addr in (0xFFFFC0..=0xFFFFFF).step_by(1) {
-                    memory_snapshot.push(new_cpu.read_byte(addr as u32));
+                // Capture low memory (0x000000-0x00007F) - 128 bytes
+                let mut memory_low = Vec::new();
+                for addr in 0x000000..0x000080 {
+                    memory_low.push(new_cpu.read_byte(addr));
+                }
+                // Capture high memory (0xFFFF80-0xFFFFFF) - 128 bytes
+                let mut memory_high = Vec::new();
+                for addr in 0xFFFF80..=0xFFFFFF {
+                    memory_high.push(new_cpu.read_byte(addr as u32));
                 }
 
                 rust_cpu_state.set(RustCpuState {
                     registers,
+                    prev_registers: prev_state.registers,
+                    prev_prev_registers: prev_state.prev_registers,
                     pc: new_cpu.get_pc(),
                     condition_flag: new_cpu.get_condition_flag(),
                     is_halted: new_cpu.is_halted(),
                     led_value: new_cpu.get_led_value(),
                     cycle_count: new_cpu.get_cycle_count(),
-                    memory_snapshot,
+                    memory_low,
+                    memory_high,
+                    prev_memory_low: prev_state.memory_low,
+                    prev_memory_high: prev_state.memory_high,
+                    prev_prev_memory_low: prev_state.prev_memory_low,
+                    prev_prev_memory_high: prev_state.prev_memory_high,
                     current_instruction: new_cpu.get_current_instruction(),
                     assembled_lines: prev_state.assembled_lines,
                 });
@@ -311,15 +337,28 @@ pub fn app() -> Html {
             let state = rust_cpu_state.clone();
             let asm_lines = (*state).assembled_lines.clone();
             let initial_cpu = (*rust_cpu).clone();
+            let prev_regs = (*state).registers;
+            let prev_prev_regs = (*state).prev_registers;
+            let prev_mem_low = (*state).memory_low.clone();
+            let prev_mem_high = (*state).memory_high.clone();
+            let prev_prev_mem_low = (*state).prev_memory_low.clone();
+            let prev_prev_mem_high = (*state).prev_memory_high.clone();
 
             // Run with animation using timer
             gloo::timers::callback::Timeout::new(50, move || {
+                #[allow(clippy::too_many_arguments)]
                 fn run_step(
                     mut current_cpu: WasmCpu,
                     cpu_handle: yew::UseStateHandle<WasmCpu>,
                     running: yew::UseStateHandle<bool>,
                     state: yew::UseStateHandle<RustCpuState>,
                     asm_lines: Vec<String>,
+                    prev_regs: [u32; 8],
+                    prev_prev_regs: [u32; 8],
+                    prev_mem_low: Vec<u8>,
+                    prev_mem_high: Vec<u8>,
+                    prev_prev_mem_low: Vec<u8>,
+                    prev_prev_mem_high: Vec<u8>,
                     steps: u32,
                 ) {
                     // Execute a batch of instructions
@@ -341,18 +380,40 @@ pub fn app() -> Html {
                     for (i, &val) in regs.iter().enumerate().take(8) {
                         registers[i] = val;
                     }
-                    let mut memory_snapshot = Vec::new();
-                    for addr in (0xFFFFC0..=0xFFFFFF).step_by(1) {
-                        memory_snapshot.push(current_cpu.read_byte(addr as u32));
+                    // Capture low memory (0x000000-0x00007F) - 128 bytes
+                    let mut memory_low = Vec::new();
+                    for addr in 0x000000..0x000080 {
+                        memory_low.push(current_cpu.read_byte(addr));
                     }
+                    // Capture high memory (0xFFFF80-0xFFFFFF) - 128 bytes
+                    let mut memory_high = Vec::new();
+                    for addr in 0xFFFF80..=0xFFFFFF {
+                        memory_high.push(current_cpu.read_byte(addr as u32));
+                    }
+
+                    // Save current values as prev for next iteration
+                    let next_prev_regs = registers;
+                    let next_prev_prev_regs = prev_regs;
+                    let next_prev_mem_low = memory_low.clone();
+                    let next_prev_mem_high = memory_high.clone();
+                    let next_prev_prev_mem_low = prev_mem_low.clone();
+                    let next_prev_prev_mem_high = prev_mem_high.clone();
+
                     state.set(RustCpuState {
                         registers,
+                        prev_registers: prev_regs,
+                        prev_prev_registers: prev_prev_regs,
                         pc: current_cpu.get_pc(),
                         condition_flag: current_cpu.get_condition_flag(),
                         is_halted: current_cpu.is_halted(),
                         led_value: current_cpu.get_led_value(),
                         cycle_count: current_cpu.get_cycle_count(),
-                        memory_snapshot,
+                        memory_low,
+                        memory_high,
+                        prev_memory_low: prev_mem_low,
+                        prev_memory_high: prev_mem_high,
+                        prev_prev_memory_low: prev_prev_mem_low,
+                        prev_prev_memory_high: prev_prev_mem_high,
                         current_instruction: current_cpu.get_current_instruction(),
                         assembled_lines: asm_lines.clone(),
                     });
@@ -368,12 +429,12 @@ pub fn app() -> Html {
                         let state = state.clone();
                         let asm_lines = asm_lines.clone();
                         gloo::timers::callback::Timeout::new(30, move || {
-                            run_step(current_cpu, cpu_handle, running, state, asm_lines, steps + 10);
+                            run_step(current_cpu, cpu_handle, running, state, asm_lines, next_prev_regs, next_prev_prev_regs, next_prev_mem_low, next_prev_mem_high, next_prev_prev_mem_low, next_prev_prev_mem_high, steps + 10);
                         }).forget();
                     }
                 }
 
-                run_step(initial_cpu, cpu_handle, running, state, asm_lines, 0);
+                run_step(initial_cpu, cpu_handle, running, state, asm_lines, prev_regs, prev_prev_regs, prev_mem_low, prev_mem_high, prev_prev_mem_low, prev_prev_mem_high, 0);
             }).forget();
         })
     };
@@ -395,19 +456,32 @@ pub fn app() -> Html {
                     for (i, &val) in regs.iter().enumerate().take(8) {
                         registers[i] = val;
                     }
-                    let mut memory_snapshot = Vec::new();
-                    for addr in (0xFFFFC0..=0xFFFFFF).step_by(1) {
-                        memory_snapshot.push(new_cpu.read_byte(addr as u32));
+                    // Capture low memory (0x000000-0x00007F) - 128 bytes
+                    let mut memory_low = Vec::new();
+                    for addr in 0x000000..0x000080 {
+                        memory_low.push(new_cpu.read_byte(addr));
+                    }
+                    // Capture high memory (0xFFFF80-0xFFFFFF) - 128 bytes
+                    let mut memory_high = Vec::new();
+                    for addr in 0xFFFF80..=0xFFFFFF {
+                        memory_high.push(new_cpu.read_byte(addr as u32));
                     }
 
                     rust_cpu_state.set(RustCpuState {
                         registers,
+                        prev_registers: registers, // No changes on reset
+                        prev_prev_registers: registers,
                         pc: new_cpu.get_pc(),
                         condition_flag: new_cpu.get_condition_flag(),
                         is_halted: new_cpu.is_halted(),
                         led_value: new_cpu.get_led_value(),
                         cycle_count: new_cpu.get_cycle_count(),
-                        memory_snapshot,
+                        memory_low: memory_low.clone(),
+                        memory_high: memory_high.clone(),
+                        prev_memory_low: memory_low.clone(),
+                        prev_memory_high: memory_high.clone(),
+                        prev_prev_memory_low: memory_low,
+                        prev_prev_memory_high: memory_high,
                         current_instruction: new_cpu.get_current_instruction(),
                         assembled_lines,
                     });
@@ -638,6 +712,7 @@ pub fn app() -> Html {
             <div class={if *active_tab == "rust" { "rust-tab-content full-width" } else { "rust-tab-content hidden" }}>
                 <RustPipeline
                     examples={rust_examples}
+                    loaded_example={(*rust_loaded_example).clone()}
                     on_load={on_rust_load}
                     on_step={on_rust_step}
                     on_run={on_rust_run}
@@ -1136,17 +1211,27 @@ main:
 001E: 13 E8        bra     .loop"#.to_string(),
         },
         RustExample {
-            name: "Add Function".to_string(),
-            description: "Simple addition of two numbers".to_string(),
+            name: "Add & Store".to_string(),
+            description: "Add two numbers and store result to memory locations".to_string(),
             rust_source: r#"#![no_std]
 use core::panic::PanicInfo;
 
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! { loop {} }
 
+// Store result at multiple memory locations
+static mut RESULT_A: u32 = 0;
+static mut RESULT_B: u32 = 0;
+static mut RESULT_C: u32 = 0;
+
 #[no_mangle]
-pub extern "C" fn add(a: i32, b: i32) -> i32 {
-    a + b
+pub extern "C" fn add_and_store(a: i32, b: i32) {
+    let sum = a + b;
+    unsafe {
+        RESULT_A = sum as u32;  // Store at 0x50
+        RESULT_B = RESULT_A;    // Copy to 0x53
+        RESULT_C = RESULT_B;    // Copy to 0x56
+    }
 }"#.to_string(),
             wasm_hex: "0061 736d 0100 0000 0107 0160 027f 7f01\n\
                        7f03 0201 0007 0701 0361 6464 0000 0a09\n\
@@ -1157,36 +1242,60 @@ pub extern "C" fn add(a: i32, b: i32) -> i32 {
   (func (;0;) (type 0) (param i32 i32) (result i32)
     local.get 0
     local.get 1
-    i32.add)
-  (export "add" (func 0)))"#.to_string(),
-            cor24_assembly: r#"; Function: add
-; Signature: (I32, I32) -> I32
-add:
+    i32.add
+    ;; store to memory locations
+    global.set $result_a
+    global.get $result_a
+    global.set $result_b
+    global.get $result_b
+    global.set $result_c)
+  (export "add_and_store" (func 0)))"#.to_string(),
+            cor24_assembly: r#"; Add & Store: compute sum and store at 3 memory locations
+; Input: r0 = a (10), r1 = b (25)
+; Output: result stored at 0x50, 0x53, 0x56
+add_and_store:
         push    fp
         mov     fp, sp
-        add     sp, -6
-        sw      r0, 0(fp)
-        sw      r1, 3(fp)
-        lw      r0, 3(fp)
-        lw      r1, 0(fp)
-        add     r0, r1
+        ; Load inputs: a=10, b=25
+        lc      r0, 10          ; r0 = 10
+        lc      r1, 25          ; r1 = 25
+        ; Compute sum
+        add     r0, r1          ; r0 = 10 + 25 = 35
+        ; Store result at 0x50
+        la      r2, 0x000050
+        sw      r0, 0(r2)       ; mem[0x50] = 35
+        ; Copy to 0x53
+        lw      r1, 0(r2)       ; r1 = mem[0x50]
+        la      r2, 0x000053
+        sw      r1, 0(r2)       ; mem[0x53] = 35
+        ; Copy to 0x56
+        lw      r0, 0(r2)       ; r0 = mem[0x53]
+        la      r2, 0x000056
+        sw      r0, 0(r2)       ; mem[0x56] = 35
+        ; Cleanup
         mov     sp, fp
         pop     fp
         halt"#.to_string(),
-            machine_code_hex: "6a4c 21fa 8a00 8b03 9203 9300 0153 76c7\n\
-                              0000 00".to_string(),
-            machine_code_size: 17,
+            machine_code_hex: "6a4c 440a 4519 01 2b50 0000 8a00 9300\n\
+                              2b53 0000 8b00 9200 2b56 0000 8a00 53 76\n\
+                              c700 0000".to_string(),
+            machine_code_size: 38,
             listing: r#"0000: 6A           push    fp
 0001: 4C           mov     fp, sp
-0002: 21 FA        add     sp, -6
-0004: 8A 00        sw      r0, 0(fp)
-0006: 8B 03        sw      r1, 3(fp)
-0008: 92 03        lw      r0, 3(fp)
-000A: 93 00        lw      r1, 0(fp)
-000C: 01           add     r0, r1
-000D: 53           mov     sp, fp
-000E: 76           pop     fp
-000F: C7 00 00 00  halt"#.to_string(),
+0002: 44 0A        lc      r0, 10
+0004: 45 19        lc      r1, 25
+0006: 01           add     r0, r1
+0007: 2A 50 00 00  la      r2, 0x000050
+000B: 8A 00        sw      r0, 0(r2)
+000D: 93 00        lw      r1, 0(r2)
+000F: 2A 53 00 00  la      r2, 0x000053
+0013: 8B 00        sw      r1, 0(r2)
+0015: 92 00        lw      r0, 0(r2)
+0017: 2A 56 00 00  la      r2, 0x000056
+001B: 8A 00        sw      r0, 0(r2)
+001D: 53           mov     sp, fp
+001E: 76           pop     fp
+001F: C7 00 00 00  halt"#.to_string(),
         },
     ]
 }

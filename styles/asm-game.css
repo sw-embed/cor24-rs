@@ -1616,13 +1616,33 @@ header h1 {
 .register-row-compact .reg-name {
     color: #c792ea;
     font-weight: bold;
-    font-size: 0.7em;
+    font-size: 0.9em;
 }
 
 .register-row-compact .reg-value {
     color: #a5d6a7;
     font-family: 'Monaco', monospace;
-    font-size: 0.7em;
+    font-size: 0.9em;
+}
+
+/* Heat map: hot (just changed) = red, warm (changed last step) = blue */
+.register-row-compact.hot {
+    background: rgba(255, 80, 80, 0.5);
+    border-left: 3px solid #ff4444;
+}
+
+.register-row-compact.hot .reg-value {
+    color: #ff8888;
+    font-weight: bold;
+}
+
+.register-row-compact.warm {
+    background: rgba(100, 149, 237, 0.3);
+    border-left: 3px solid #6495ed;
+}
+
+.register-row-compact.warm .reg-value {
+    color: #87ceeb;
 }
 
 .cycle-info {
@@ -1649,11 +1669,42 @@ header h1 {
     padding: 8px;
     border-radius: 3px;
     font-family: 'Monaco', monospace;
-    font-size: 0.65em;
+    font-size: 0.8em;
     color: #888;
-    max-height: 280px;
+    max-height: 250px;
     overflow-y: auto;
     margin: 0;
+}
+
+.memory-dump-compact .memory-row {
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.memory-dump-compact .memory-addr {
+    color: #666;
+}
+
+.memory-dump-compact .mem-byte {
+    display: inline-block;
+    width: 2.2em;
+    text-align: center;
+    margin: 0 1px;
+    border-radius: 2px;
+}
+
+/* Memory heat map: hot = red, warm = blue */
+.memory-dump-compact .mem-byte.hot {
+    background: #ff4444;
+    color: #fff;
+    font-weight: bold;
+    box-shadow: 0 0 6px rgba(255, 68, 68, 0.8);
+}
+
+.memory-dump-compact .mem-byte.warm {
+    background: #4488ff;
+    color: #fff;
+    box-shadow: 0 0 4px rgba(68, 136, 255, 0.6);
 }
 
 /* Purple-themed buttons in wizard */

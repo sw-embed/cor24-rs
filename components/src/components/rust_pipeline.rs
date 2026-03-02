@@ -23,12 +23,19 @@ pub struct RustExample {
 #[derive(Clone, PartialEq, Default)]
 pub struct RustCpuState {
     pub registers: [u32; 8],
+    pub prev_registers: [u32; 8],      // Changed last step (hot)
+    pub prev_prev_registers: [u32; 8], // Changed 2 steps ago (warm)
     pub pc: u32,
     pub condition_flag: bool,
     pub is_halted: bool,
     pub led_value: u8,
     pub cycle_count: u32,
-    pub memory_snapshot: Vec<u8>,
+    pub memory_low: Vec<u8>,
+    pub memory_high: Vec<u8>,
+    pub prev_memory_low: Vec<u8>,      // Changed last step (hot)
+    pub prev_memory_high: Vec<u8>,
+    pub prev_prev_memory_low: Vec<u8>, // Changed 2 steps ago (warm)
+    pub prev_prev_memory_high: Vec<u8>,
     pub current_instruction: String,
     pub assembled_lines: Vec<String>,
 }
@@ -88,6 +95,8 @@ impl WizardStep {
 #[derive(Properties, PartialEq)]
 pub struct RustPipelineProps {
     pub examples: Vec<RustExample>,
+    #[prop_or_default]
+    pub loaded_example: Option<RustExample>,
     pub on_load: Callback<RustExample>,
     pub on_step: Callback<()>,
     pub on_run: Callback<()>,
@@ -116,10 +125,8 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
     // Load dialog state
     let load_dialog_open = use_state(|| false);
 
-    // Selected example state
-    let selected_example = use_state(|| {
-        props.examples.first().cloned()
-    });
+    // Selected example state - None means "Choose an example..." is shown
+    let selected_example = use_state(|| None::<RustExample>);
 
     // Track PC for auto-scroll
     let last_pc = use_state(|| 0u32);
@@ -168,9 +175,12 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
         Callback::from(move |e: Event| {
             let target = e.target_dyn_into::<web_sys::HtmlSelectElement>();
             if let Some(select) = target {
-                let idx = select.selected_index() as usize;
-                if let Some(example) = examples.get(idx) {
-                    selected_example.set(Some(example.clone()));
+                let idx = select.selected_index();
+                // Index 0 is "Choose an example...", so subtract 1 for actual examples
+                if idx > 0 {
+                    if let Some(example) = examples.get((idx - 1) as usize) {
+                        selected_example.set(Some(example.clone()));
+                    }
                 }
             }
         })
@@ -203,6 +213,16 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
                 on_load.emit(example.clone());
                 current_step.set(WizardStep::Source);
                 load_dialog_open.set(false);
+                // Scroll notebook to top to show source cell
+                gloo::timers::callback::Timeout::new(50, || {
+                    if let Some(window) = web_sys::window() {
+                        if let Some(document) = window.document() {
+                            if let Some(container) = document.get_element_by_id("notebook-scroll") {
+                                container.set_scroll_top(0);
+                            }
+                        }
+                    }
+                }).forget();
             }
         })
     };
@@ -356,7 +376,8 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
                 <div class="wizard-header-space"></div>
 
                 {for all_steps.iter().map(|&step| {
-                    let is_completed = step < *current_step;
+                    // Step is completed if we're at or past it (and an example is loaded)
+                    let is_completed = props.is_loaded && step <= *current_step;
                     let is_active = step == *current_step;
                     let is_disabled = step > *current_step;
 
@@ -399,7 +420,7 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
 
             // Column 3: Notebook cells
             <div class="notebook-cells" id="notebook-scroll">
-                if let Some(example) = &*selected_example {
+                if let Some(example) = &props.loaded_example {
                     // Cell 1: Rust Source (always visible)
                     <div class="notebook-cell" id="cell-source">
                         <div class="cell-header">{"Rust Source"}</div>
@@ -508,8 +529,18 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
                                                     _ => "??",
                                                 };
                                                 let val = state.registers[i];
+                                                // Heat map: hot (just changed), warm (changed last step), cold (normal)
+                                                let is_hot = val != state.prev_registers[i];
+                                                let is_warm = !is_hot && state.prev_registers[i] != state.prev_prev_registers[i];
+                                                let row_class = if is_hot {
+                                                    "register-row-compact hot"
+                                                } else if is_warm {
+                                                    "register-row-compact warm"
+                                                } else {
+                                                    "register-row-compact"
+                                                };
                                                 html! {
-                                                    <div class="register-row-compact">
+                                                    <div class={row_class}>
                                                         <span class="reg-name">{name}</span>
                                                         <span class="reg-value">{format!("0x{:06X}", val)}</span>
                                                     </div>
@@ -529,13 +560,19 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
                                             <span>{"Cycles: "}{state.cycle_count}</span>
                                         </div>
 
-                                        // Memory viewer (first 64 bytes of stack area)
-                                        if props.is_loaded && !state.memory_snapshot.is_empty() {
+                                        // Memory viewer - dual panels
+                                        if props.is_loaded {
                                             <div class="memory-section">
-                                                <h4>{"Memory (Stack)"}</h4>
-                                                <pre class="memory-dump-compact">{
-                                                    format_memory_dump(&state.memory_snapshot, 0xFFFFC0)
-                                                }</pre>
+                                                <h4>{"Memory (Low: 0x000000→)"}</h4>
+                                                <div class="memory-dump-compact">{
+                                                    format_memory_dump_heatmap(&state.memory_low, &state.prev_memory_low, &state.prev_prev_memory_low, 0x000000)
+                                                }</div>
+                                            </div>
+                                            <div class="memory-section">
+                                                <h4>{"Memory (High: ←0xFFFFFF)"}</h4>
+                                                <div class="memory-dump-compact">{
+                                                    format_memory_dump_reversed_heatmap(&state.memory_high, &state.prev_memory_high, &state.prev_prev_memory_high, 0xFFFF80)
+                                                }</div>
                                             </div>
                                         }
                                     </div>
@@ -567,16 +604,25 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
                         <div class="wizard-dialog-body">
                             <label>{"Select an example:"}</label>
                             <select class="wizard-dialog-select" onchange={on_example_select} disabled={props.is_running}>
+                                <option value="" selected={selected_example.is_none()} disabled={true}>
+                                    {"Choose an example..."}
+                                </option>
                                 {for props.examples.iter().map(|ex| {
+                                    let is_selected = match &*selected_example {
+                                        Some(sel) => sel.name == ex.name,
+                                        None => false,
+                                    };
                                     html! {
-                                        <option value={ex.name.clone()}>{&ex.name}{" - "}{&ex.description}</option>
+                                        <option value={ex.name.clone()} selected={is_selected}>
+                                            {&ex.name}{" - "}{&ex.description}
+                                        </option>
                                     }
                                 })}
                             </select>
                         </div>
                         <div class="wizard-dialog-footer">
                             <button class="wizard-dialog-cancel" onclick={on_load_dialog_close}>{"Cancel"}</button>
-                            <button class="wizard-dialog-load" onclick={on_load_click} disabled={props.is_running}>{"Load"}</button>
+                            <button class="wizard-dialog-load" onclick={on_load_click} disabled={props.is_running || selected_example.is_none()}>{"Load"}</button>
                         </div>
                     </div>
                 </div>
@@ -585,19 +631,69 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
     }
 }
 
-/// Format memory as hex dump with addresses
-fn format_memory_dump(data: &[u8], base_addr: u32) -> String {
-    let mut output = String::new();
-    for (i, chunk) in data.chunks(16).enumerate() {
-        let addr = base_addr + (i * 16) as u32;
-        output.push_str(&format!("{:06X}: ", addr));
-        for (j, byte) in chunk.iter().enumerate() {
-            output.push_str(&format!("{:02X} ", byte));
-            if j == 7 {
-                output.push(' ');
-            }
-        }
-        output.push('\n');
+/// Format memory as hex dump with heat map highlighting (returns Html)
+fn format_memory_dump_heatmap(data: &[u8], prev: &[u8], prev_prev: &[u8], base_addr: u32) -> Html {
+    html! {
+        <>
+            {for data.chunks(16).enumerate().map(|(i, chunk)| {
+                let addr = base_addr + (i * 16) as u32;
+                html! {
+                    <div class="memory-row">
+                        <span class="memory-addr">{format!("{:06X}: ", addr)}</span>
+                        {for chunk.iter().enumerate().map(|(j, byte)| {
+                            let idx = i * 16 + j;
+                            let prev_byte = prev.get(idx).copied().unwrap_or(0);
+                            let prev_prev_byte = prev_prev.get(idx).copied().unwrap_or(0);
+                            let is_hot = *byte != prev_byte;
+                            let is_warm = !is_hot && prev_byte != prev_prev_byte;
+                            let class = if is_hot {
+                                "mem-byte hot"
+                            } else if is_warm {
+                                "mem-byte warm"
+                            } else {
+                                "mem-byte"
+                            };
+                            html! {
+                                <span class={class}>{format!("{:02X}", byte)}</span>
+                            }
+                        })}
+                    </div>
+                }
+            })}
+        </>
     }
-    output
+}
+
+/// Format memory as hex dump in reverse order with heat map highlighting (returns Html)
+fn format_memory_dump_reversed_heatmap(data: &[u8], prev: &[u8], prev_prev: &[u8], base_addr: u32) -> Html {
+    let chunks: Vec<_> = data.chunks(16).collect();
+    html! {
+        <>
+            {for chunks.iter().enumerate().rev().map(|(i, chunk)| {
+                let addr = base_addr + (i * 16) as u32;
+                html! {
+                    <div class="memory-row">
+                        <span class="memory-addr">{format!("{:06X}: ", addr)}</span>
+                        {for chunk.iter().enumerate().map(|(j, byte)| {
+                            let idx = i * 16 + j;
+                            let prev_byte = prev.get(idx).copied().unwrap_or(0);
+                            let prev_prev_byte = prev_prev.get(idx).copied().unwrap_or(0);
+                            let is_hot = *byte != prev_byte;
+                            let is_warm = !is_hot && prev_byte != prev_prev_byte;
+                            let class = if is_hot {
+                                "mem-byte hot"
+                            } else if is_warm {
+                                "mem-byte warm"
+                            } else {
+                                "mem-byte"
+                            };
+                            html! {
+                                <span class={class}>{format!("{:02X}", byte)}</span>
+                            }
+                        })}
+                    </div>
+                }
+            })}
+        </>
+    }
 }
