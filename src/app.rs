@@ -1,5 +1,8 @@
 //! Yew application for COR24 Assembly Emulator
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use components::{
     Collapsible, Header, LegendItem, MemoryViewer, Modal, ProgramArea, Register, RegisterPanel,
     RustCpuState, RustExample, RustPipeline, Sidebar, SidebarButton, Tab, TabBar,
@@ -33,7 +36,8 @@ pub fn app() -> Html {
 
     // Animated run state for assembler tab
     let asm_is_running = use_state(|| false);
-    let asm_stop_requested = use_state(|| false);
+    // Use Rc<Cell> for stop flag - provides immediate visibility across closures
+    let asm_stop_requested = use_mut_ref(|| Rc::new(Cell::new(false)));
 
     // Modal states
     let tutorial_open = use_state(|| false);
@@ -180,17 +184,17 @@ pub fn app() -> Html {
         let cpu = cpu.clone();
         let assembly_output = assembly_output.clone();
         let asm_is_running = asm_is_running.clone();
-        let asm_stop_requested = asm_stop_requested.clone();
+        let stop_flag = asm_stop_requested.borrow().clone();
 
         Callback::from(move |()| {
             // Start animated run
             asm_is_running.set(true);
-            asm_stop_requested.set(false);
+            stop_flag.set(false);
 
             let cpu_handle = cpu.clone();
             let output_handle = assembly_output.clone();
             let running_handle = asm_is_running.clone();
-            let stop_handle = asm_stop_requested.clone();
+            let stop_handle = stop_flag.clone();
             let current_cpu = (*cpu).clone();
 
             // Start the animated run loop
@@ -199,10 +203,10 @@ pub fn app() -> Html {
                 cpu_handle: yew::UseStateHandle<WasmCpu>,
                 output_handle: yew::UseStateHandle<Option<Html>>,
                 running_handle: yew::UseStateHandle<bool>,
-                stop_handle: yew::UseStateHandle<bool>,
+                stop_handle: Rc<Cell<bool>>,
             ) {
-                // Check if stop was requested
-                if *stop_handle {
+                // Check if stop was requested (immediate - no state delay)
+                if stop_handle.get() {
                     cpu_handle.set(current_cpu);
                     running_handle.set(false);
                     output_handle.set(Some(yew::html! {
@@ -262,9 +266,9 @@ pub fn app() -> Html {
     };
 
     let on_stop = {
-        let asm_stop_requested = asm_stop_requested.clone();
+        let stop_flag = asm_stop_requested.borrow().clone();
         Callback::from(move |()| {
-            asm_stop_requested.set(true);
+            stop_flag.set(true);
         })
     };
 
