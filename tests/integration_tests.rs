@@ -47,6 +47,16 @@ fn test_count_down() {
 }
 
 #[test]
+fn test_hello_world() {
+    let cpu = load_and_run(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/programs/hello_world.lgo"),
+        0,
+        1000,
+    );
+    assert_eq!(cpu.io.uart_output, "Hello, World!\n", "Should print 'Hello, World!\\n'");
+}
+
+#[test]
 fn test_led_blink() {
     let cpu = load_and_run(
         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/programs/led_blink.lgo"),
