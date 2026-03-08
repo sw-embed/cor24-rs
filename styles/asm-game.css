@@ -76,10 +76,10 @@ h1 {
 }
 
 .panel-title {
-    color: #00d9ff;
-    font-size: 0.75em;
+    color: #7fd8ff;
+    font-size: 0.9em;
     margin-bottom: 4px;
-    border-bottom: 1px solid #00d9ff;
+    border-bottom: 1px solid #7fd8ff;
     padding-bottom: 2px;
     flex-shrink: 0;
 }
@@ -137,7 +137,7 @@ button.stop-btn:hover {
     flex-wrap: wrap;
     flex-shrink: 0;
     padding: 8px;
-    background: #0f3460;
+    background: #111122;
     border-radius: 5px;
     margin-top: 8px;
     margin-bottom: 8px;
@@ -145,24 +145,24 @@ button.stop-btn:hover {
 
 #programEditor {
     width: 100%;
-    background: #0f3460;
-    color: #0f0;
-    border: 1px solid #00d9ff;
+    background: #0a0a1a;
+    color: #e0e0e0;
+    border: 1px solid #555;
     border-radius: 3px;
     padding: 8px;
     font-family: 'Monaco', monospace;
-    font-size: 0.75em;
+    font-size: 0.9em;
     resize: none;
     flex: 1.2;
     min-height: 150px;
 }
 
 #assemblyOutput {
-    background: #0f3460;
+    background: #0a0a1a;
     padding: 8px;
     border-radius: 3px;
     font-family: 'Monaco', monospace;
-    font-size: 0.75em;
+    font-size: 0.9em;
     flex: 1;
     overflow-y: auto;
     display: none;
@@ -192,9 +192,9 @@ button.stop-btn:hover {
 .registers-panel {
     flex: 0.6;
     overflow: hidden;
-    background: #16213e;
+    background: #111122;
     border-radius: 5px;
-    padding: 4px;
+    padding: 6px;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -219,45 +219,46 @@ button.stop-btn:hover {
 }
 
 .register {
-    background: #0f3460;
-    padding: 2px 4px;
-    border-radius: 2px;
+    background: #0a0a1a;
+    padding: 4px 8px;
+    border-radius: 3px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.7em;
+    font-size: 0.9em;
     transition: background-color 0.3s ease;
 }
 
 .register.changed {
-    background: #1a5f1a;
-    border: 1px solid #0f0;
+    background: #1a4f1a;
+    border: 1px solid #4f4;
 }
 
 .register-label {
-    color: #00d9ff;
+    color: #7fd8ff;
     font-weight: bold;
 }
 
 .register-value {
-    color: #0f0;
+    color: #e0e0e0;
     font-family: 'Monaco', monospace;
 }
 
 .register-value.changed {
-    background: #1a5f1a;
+    color: #4f4;
+    background: #1a4f1a;
     padding: 2px 4px;
     border-radius: 3px;
 }
 
 .register-legend {
-    background: #0a2540;
-    padding: 3px 4px;
-    border-radius: 2px;
-    font-size: 0.6em;
-    color: #aaa;
-    border-left: 2px solid #00d9ff;
-    width: 130px;
+    background: #0a0a1a;
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-size: 0.8em;
+    color: #ccc;
+    border-left: 2px solid #7fd8ff;
+    width: 150px;
     flex-shrink: 0;
 }
 
@@ -292,7 +293,7 @@ button.stop-btn:hover {
 .memory-panel {
     flex: 2;
     overflow: hidden;
-    background: #16213e;
+    background: #111122;
     border-radius: 5px;
     padding: 6px;
     display: flex;
@@ -301,13 +302,13 @@ button.stop-btn:hover {
 }
 
 .memory-viewer {
-    background: #0f3460;
+    background: #0a0a1a;
     padding: 4px;
     border-radius: 3px;
     overflow-y: auto;
     flex: 1;
     font-family: 'Monaco', monospace;
-    font-size: 0.75em;
+    font-size: 0.85em;
     min-height: 0;
 }
 
@@ -318,14 +319,14 @@ button.stop-btn:hover {
 }
 
 .memory-address {
-    color: #888;
-    min-width: 50px;
+    color: #999;
+    min-width: 55px;
 }
 
 .memory-byte {
     display: inline-block;
     margin-right: 4px;
-    color: #0f0;
+    color: #d0d0d0;
 }
 
 .memory-byte.pc-highlight {
@@ -392,29 +393,29 @@ button.stop-btn:hover {
 
 /* CPU Status */
 .cpu-status {
-    background: #0f3460;
-    padding: 2px 4px;
-    border-radius: 2px;
-    margin-top: 2px;
+    background: #0a0a1a;
+    padding: 4px 8px;
+    border-radius: 3px;
+    margin-top: 4px;
     flex-shrink: 0;
     display: flex;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: wrap;
 }
 
 .status-item {
     display: flex;
-    gap: 3px;
+    gap: 4px;
     align-items: center;
-    font-size: 0.6em;
+    font-size: 0.85em;
 }
 
 .status-label {
-    color: #aaa;
+    color: #999;
 }
 
 .status-value {
-    color: #0f0;
+    color: #e0e0e0;
 }
 
 /* Modal Component */
@@ -690,8 +691,8 @@ table td {
 }
 
 .io-label {
-    color: #888;
-    font-size: 0.65em;
+    color: #bbb;
+    font-size: 0.8em;
 }
 
 .led-row, .switch-row {
@@ -775,8 +776,8 @@ table td {
 }
 
 .io-values {
-    font-size: 0.65em;
-    color: #0f0;
+    font-size: 0.85em;
+    color: #e0e0e0;
     text-align: center;
     font-family: 'Monaco', monospace;
 }
@@ -834,10 +835,10 @@ header h1 {
    ============================================================================= */
 
 .collapsible {
-    background: #16213e;
+    background: #111122;
     border-radius: 5px;
     margin-bottom: 8px;
-    border: 1px solid #0f3460;
+    border: 1px solid #222;
 }
 
 .collapsible-header {
@@ -861,9 +862,9 @@ header h1 {
 }
 
 .collapsible-title {
-    color: #00d9ff;
+    color: #7fd8ff;
     font-weight: bold;
-    font-size: 0.85em;
+    font-size: 0.9em;
     flex: 1;
 }
 
@@ -1153,19 +1154,19 @@ header h1 {
     gap: 16px;
 }
 
-/* Registers panel */
+/* Registers panel (assembler tab override) */
 .registers-panel {
-    background: #0f3460;
+    background: #111122;
     padding: 12px;
     border-radius: 5px;
 }
 
 .registers-panel h4 {
-    color: #00d9ff;
-    font-size: 0.8em;
+    color: #7fd8ff;
+    font-size: 0.9em;
     margin-bottom: 10px;
     padding-bottom: 6px;
-    border-bottom: 1px solid #16213e;
+    border-bottom: 1px solid #333;
 }
 
 .register-grid {
@@ -1178,35 +1179,35 @@ header h1 {
     display: flex;
     justify-content: space-between;
     padding: 4px 8px;
-    background: #16213e;
-    border-radius: 2px;
+    background: #0a0a1a;
+    border-radius: 3px;
 }
 
 .reg-name {
-    color: #00d9ff;
+    color: #7fd8ff;
     font-weight: bold;
-    font-size: 0.75em;
+    font-size: 0.9em;
 }
 
 .reg-value {
-    color: #0f0;
+    color: #e0e0e0;
     font-family: 'Monaco', monospace;
-    font-size: 0.75em;
+    font-size: 0.9em;
 }
 
 /* I/O panel */
 .io-panel {
-    background: #0f3460;
+    background: #111122;
     padding: 12px;
     border-radius: 5px;
 }
 
 .io-panel h4 {
-    color: #00d9ff;
-    font-size: 0.8em;
+    color: #7fd8ff;
+    font-size: 0.9em;
     margin-bottom: 10px;
     padding-bottom: 6px;
-    border-bottom: 1px solid #16213e;
+    border-bottom: 1px solid #333;
 }
 
 /* I2C panel placeholder */

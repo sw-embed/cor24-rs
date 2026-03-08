@@ -119,7 +119,15 @@ impl Executor {
                 // So branch base = instruction_addr + 4 = next_pc + 2
                 let offset = CpuState::sign_extend_8(imm8);
                 let branch_base = next_pc.wrapping_add(2);
-                cpu.pc = CpuState::mask_24(branch_base.wrapping_add(offset));
+                let target = CpuState::mask_24(branch_base.wrapping_add(offset));
+                // Detect self-branch (halt: bra halt) as halt condition
+                let instruction_addr = CpuState::mask_24(next_pc.wrapping_sub(2));
+                if target == instruction_addr {
+                    cpu.pc = instruction_addr;
+                    cpu.halted = true;
+                    return ExecuteResult::Halted;
+                }
+                cpu.pc = target;
             }
 
             Opcode::Brf => {

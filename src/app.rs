@@ -746,6 +746,8 @@ pub fn app() -> Html {
     let sp = (*cpu).read_register(4); // r4 = SP
     let stack_display_bytes: u32 = 64;
     let memory_stack = (*cpu).get_memory_slice(sp, stack_display_bytes);
+    let io_display_bytes: u32 = 128;
+    let memory_io = (*cpu).get_memory_slice(0xFFFF80, io_display_bytes);
     let pc = (*cpu).pc();
 
     // Get examples for the modal
@@ -906,6 +908,14 @@ pub fn app() -> Html {
                         title={Some(format!("Stack (SP = 0x{:06X})", sp))}
                         bytes_per_row={16}
                         bytes_to_show={stack_display_bytes as usize}
+                    />
+                    <MemoryViewer
+                        memory={memory_io}
+                        pc={0u32}
+                        base_address={0xFFFF80u32}
+                        title={Some("I/O (0xFFFF80 →)".to_string())}
+                        bytes_per_row={16}
+                        bytes_to_show={io_display_bytes as usize}
                     />
                 </div>
             </div>
