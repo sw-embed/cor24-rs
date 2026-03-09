@@ -91,6 +91,17 @@ impl Assembler {
         // Second pass: resolve forward references
         self.resolve_forward_refs();
 
+        // Update line bytes from resolved output
+        for line in &mut self.lines {
+            if !line.bytes.is_empty() {
+                let addr = line.address as usize;
+                let len = line.bytes.len();
+                if addr + len <= self.output.len() {
+                    line.bytes = self.output[addr..addr + len].to_vec();
+                }
+            }
+        }
+
         AssemblyResult {
             bytes: self.output.clone(),
             lines: self.lines.clone(),
@@ -1154,6 +1165,6 @@ halt:   bra     halt        ; Never reached
         let mut asm = Assembler::new();
         let result = asm.assemble(code);
         assert!(result.errors.is_empty(), "Assembly errors: {:?}", result.errors);
-        assert!(result.bytes.len() > 0, "Should produce bytes");
+        assert!(!result.bytes.is_empty(), "Should produce bytes");
     }
 }

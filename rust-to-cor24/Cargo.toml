@@ -17,6 +17,10 @@ name = "wasm2cor24"
 path = "src/main.rs"
 
 [[bin]]
+name = "msp430-to-cor24"
+path = "src/msp430_cli.rs"
+
+[[bin]]
 name = "cor24-run"
 path = "src/run.rs"
 

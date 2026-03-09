@@ -1,10 +1,13 @@
 //! wasm2cor24 library
 //!
 //! Provides WASM to COR24 translation and full pipeline support.
+//! Also provides MSP430 to COR24 translation for the 16-bit IR approach.
 
 mod pipeline;
+pub mod msp430;
 
 pub use pipeline::{run_pipeline, print_leds};
+pub use msp430::translate_msp430;
 
 use anyhow::Result;
 use wasmparser::{FuncType, Operator, Parser, Payload};
@@ -149,7 +152,7 @@ fn translate_function(
             }
 
             Operator::I32Const { value } => {
-                if value >= -128 && value <= 127 {
+                if (-128..=127).contains(&value) {
                     code.push(format!("        lc      r{}, {}\n", stack_depth, value));
                 } else {
                     code.push(format!("        la      r{}, 0x{:06X}\n", stack_depth, value as u32 & 0xFFFFFF));

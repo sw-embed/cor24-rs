@@ -282,7 +282,7 @@ fn translate_function(
             }
 
             Operator::I32Const { value } => {
-                if value >= -128 && value <= 127 {
+                if (-128..=127).contains(&value) {
                     code.push(format!("        lc      r{}, {}\n", stack_depth, value));
                 } else {
                     code.push(format!(
@@ -512,7 +512,7 @@ fn translate_function(
 
     // Return - result is in r0
     output.push_str("        halt                ; return (use jmp (r1) for real calls)\n");
-    output.push_str("\n");
+    output.push('\n');
 
     Ok(output)
 }

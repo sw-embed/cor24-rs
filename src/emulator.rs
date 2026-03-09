@@ -350,6 +350,16 @@ impl EmulatorCore {
         (0..len).map(|i| self.cpu.read_byte(addr + i)).collect()
     }
 
+    /// Direct read-only access to SRAM backing memory (0x000000-0x0FFFFF)
+    pub fn sram(&self) -> &[u8] {
+        &self.cpu.memory
+    }
+
+    /// Direct read-only access to EBR backing memory (0xFEE000-0xFEFFFF)
+    pub fn ebr(&self) -> &[u8] {
+        &self.cpu.ebr
+    }
+
     // ===== I/O: LED and Button =====
 
     pub fn get_led(&self) -> u8 {
