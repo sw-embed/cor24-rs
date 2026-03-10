@@ -298,3 +298,42 @@ fn test_interrupt_example() {
     executor.run(&mut cpu, 1000);
     assert_eq!(cpu.io.uart_output.len(), 2, "Should have two digits after two interrupts");
 }
+
+/// Echo example: letters echo as uppercase+lowercase, non-letters as hex
+#[test]
+fn test_echo_example() {
+    let source = include_str!("../docs/examples/echo.s");
+    let mut assembler = Assembler::new();
+    let result = assembler.assemble(source);
+    assert!(result.errors.is_empty(), "Echo assembly errors: {:?}", result.errors);
+
+    let mut cpu = CpuState::new();
+    for (addr, byte) in result.bytes.iter().enumerate() {
+        cpu.memory[addr] = *byte;
+    }
+    cpu.pc = 0;
+    let executor = Executor::new();
+
+    // Run to reach idle loop
+    executor.run(&mut cpu, 100);
+
+    // Send 'a' -> should echo "Aa"
+    cpu.uart_send_rx(b'a');
+    executor.run(&mut cpu, 1000);
+    assert_eq!(cpu.io.uart_output, "Aa", "Lowercase 'a' should echo 'Aa'");
+
+    // Send 'B' -> should echo "Bb"
+    cpu.uart_send_rx(b'B');
+    executor.run(&mut cpu, 1000);
+    assert_eq!(cpu.io.uart_output, "AaBb", "'B' should echo 'Bb'");
+
+    // Send '?' (0x3F) -> should echo "3F"
+    cpu.uart_send_rx(b'?');
+    executor.run(&mut cpu, 1000);
+    assert_eq!(cpu.io.uart_output, "AaBb3F", "'?' should echo hex '3F'");
+
+    // Send '<' (0x3C) -> should echo "3C"
+    cpu.uart_send_rx(b'<');
+    executor.run(&mut cpu, 1000);
+    assert_eq!(cpu.io.uart_output, "AaBb3F3C", "'<' should echo hex '3C'");
+}

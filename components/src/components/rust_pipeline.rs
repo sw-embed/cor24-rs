@@ -156,6 +156,7 @@ pub struct RustPipelineProps {
     pub is_running: bool,
     pub switch_value: u8,
     pub on_switch_toggle: Callback<u8>,
+    pub on_uart_send: Callback<u8>,
     // Modal callbacks - passed from app.rs
     #[prop_or_default]
     pub on_tutorial_open: Callback<()>,
@@ -380,6 +381,7 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
                                 on_reset={props.on_reset.clone()}
                                 switch_value={props.switch_value}
                                 on_switch_toggle={props.on_switch_toggle.clone()}
+                                on_uart_send={props.on_uart_send.clone()}
                                 listing_scroll_id={"asm-listing-scroll".to_string()}
                             />
                         </div>

@@ -2,6 +2,7 @@
 //! Used by both the Assembler tab and the Rust Pipeline tab.
 
 use wasm_bindgen::JsCast;
+use web_sys::KeyboardEvent;
 use yew::prelude::*;
 
 use crate::EmulatorState;
@@ -32,6 +33,8 @@ pub struct DebugPanelProps {
     pub on_reset: Callback<()>,
     pub switch_value: u8,
     pub on_switch_toggle: Callback<u8>,
+    /// Send a byte to UART RX (triggers interrupt if enabled)
+    pub on_uart_send: Callback<u8>,
     /// Optional scroll container ID for assembly listing auto-scroll
     #[prop_or_default]
     pub listing_scroll_id: Option<String>,
@@ -287,7 +290,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                         <span class="instruction-count">{"Instructions: "}{state.instruction_count}</span>
                     </div>
 
-                    // I/O: Switch and LED
+                    // I/O: Switch, LED, and UART
                     <div class="debug-io">
                         <div class="peripheral-section-inline">
                             <div class={switch_class} onclick={on_switch_click} data-tooltip="Click to toggle button S2">
@@ -299,12 +302,43 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                             <div class={led_class} style={led_style}>{"D2"}</div>
                             <span class="io-inline-status">{led_status}</span>
                         </div>
-                        if !state.uart_output.is_empty() {
-                            <div class="peripheral-section-inline uart-terminal" data-tooltip="UART output (0xFF0100)">
-                                <span class="uart-label">{"UART TX:"}</span>
-                                <span class="uart-output">{format_uart_output(&state.uart_output)}</span>
+                        <div class="uart-panel" data-tooltip="UART I/O (0xFF0100). Click input to type characters.">
+                            <div class="uart-panel-row">
+                                <span class="uart-label">{"RX:"}</span>
+                                <input type="text"
+                                    class="uart-input"
+                                    placeholder="type here..."
+                                    readonly=true
+                                    onkeydown={
+                                        let on_uart_send = props.on_uart_send.clone();
+                                        Callback::from(move |e: KeyboardEvent| {
+                                            e.prevent_default();
+                                            let key = e.key();
+                                            let byte: Option<u8> = if key.len() == 1 {
+                                                Some(key.as_bytes()[0])
+                                            } else if key == "Enter" {
+                                                Some(0x0A)
+                                            } else {
+                                                None
+                                            };
+                                            if let Some(b) = byte {
+                                                on_uart_send.emit(b);
+                                            }
+                                        })
+                                    }
+                                />
                             </div>
-                        }
+                            <div class="uart-panel-row">
+                                <span class="uart-label">{"TX:"}</span>
+                                <span class="uart-output">{
+                                    if state.uart_output.is_empty() {
+                                        "\u{00a0}".to_string()
+                                    } else {
+                                        format_uart_output(&state.uart_output)
+                                    }
+                                }</span>
+                            </div>
+                        </div>
                     </div>
 
                     // Memory viewer - three regions

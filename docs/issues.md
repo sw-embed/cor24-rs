@@ -123,7 +123,7 @@ Only one screenshot exists (`images/cor24-interface-2026-02-26T05-07-30-868Z.png
 
 ## Testing
 
-### Test Coverage (189 tests)
+### Test Coverage (190 tests)
 
 - `src/assembler.rs` — 23 tests (all instruction types, labels, integration)
 - `src/cpu/state.rs` — 22 tests (memory regions, I/O, UART, push/pop, EBR)
@@ -132,7 +132,7 @@ Only one screenshot exists (`images/cor24-interface-2026-02-26T05-07-30-868Z.png
 - `src/cpu/encode.rs` — 5 tests (add, push/pop, mov, branch, lc)
 - `src/emulator.rs` — 9 tests (breakpoints, run/step, I/O, sieve)
 - `src/loader.rs` — 8 tests (LGO parsing and loading)
-- `tests/integration_tests.rs` — 17 tests (full programs: LED, UART, sieve, Fibonacci, Multiply, halt detection, memory access, OOM, stack overflow, interrupt)
+- `tests/integration_tests.rs` — 18 tests (full programs: LED, UART, sieve, Fibonacci, Multiply, halt detection, memory access, OOM, stack overflow, interrupt, echo)
 
 ### No CI Pipeline
 
