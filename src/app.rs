@@ -1746,97 +1746,148 @@ delay:
         // Demo 5: Fibonacci
         RustExample {
             name: "Fibonacci".to_string(),
-            description: "Compute fib(10) = 55, display on LED".to_string(),
-            rust_source: r#"#[no_mangle]
-pub fn fibonacci(n: u16) -> u16 {
-    if n <= 1 { return n; }
-    let mut a: u16 = 0;
-    let mut b: u16 = 1;
-    let mut i: u16 = 2;
-    while i <= n {
-        let tmp = a + b;
-        a = b;
-        b = tmp;
-        i += 1;
-    }
-    b
-}
+            description: "Print fib(1)..fib(10) to UART".to_string(),
+            rust_source: r#"// Print Fibonacci series: 1 1 2 3 5 8 13 21 34 55
+// UART TX: "1 1 2 3 5 8 13 21 34 55\n"
 
 #[no_mangle]
 pub unsafe fn demo_fibonacci() {
-    let result = fibonacci(10);
-    mmio_write(LED_ADDR, result);
-    loop {}  // halt
+    let mut a: u16 = 0;
+    let mut b: u16 = 1;
+    for i in 0..10 {
+        print_num(b);
+        if i < 9 { uart_putc(b' '); }
+        let tmp = a + b;
+        a = b;
+        b = tmp;
+    }
+    uart_putc(b'\n');
+    loop {}
 }"#.to_string(),
             msp430_asm: r#"demo_fibonacci:
-	mov	#-256, r12        ; compiler constant-folded fib(10)=55
-	mov	#55, r13
-	call	#mmio_write
-.LBB7_1:
-	jmp	.LBB7_1
+	clr	r10               ; a = 0
+	mov	#1, r9            ; b = 1
+	mov	#10, r8           ; counter
+.Lloop:
+	mov	r9, r12
+	call	#print_num        ; print b
+	cmp	#1, r8
+	jeq	.Lskip
+	mov	#32, r12          ; ' '
+	call	#uart_putc
+.Lskip:
+	mov	r9, r11
+	add	r10, r9           ; b = a + b
+	mov	r11, r10          ; a = old b
+	dec	r8
+	jnz	.Lloop
+	mov	#10, r12          ; '\n'
+	call	#uart_putc
+.Lhalt:
+	jmp	.Lhalt"#.to_string(),
+            cor24_assembly: r#"; --- demo_fibonacci: print series to UART ---
+; UART TX: "1 1 2 3 5 8 13 21 34 55\n"
 
-fibonacci:
-	cmp	#2, r12
-	jhs	.LBB11_2
-	mov	r12, r13
-	jmp	.LBB11_4
-.LBB11_2:
-	mov	#2, r14
-	clr	r15
-	mov	#1, r13
-.LBB11_3:
-	mov	r13, r11
-	mov	r15, r13
-	add	r11, r13
-	inc	r14
-	cmp	r14, r12
-	mov	r11, r15
-	jhs	.LBB11_3
-.LBB11_4:
-	mov	r13, r12
-	ret"#.to_string(),
-            cor24_assembly: r#"; --- demo_fibonacci: fib(10)=55, write to LED ---
-; Note: compiler constant-folded the call, so the
-; fibonacci function is included but not called.
-demo_fibonacci:
-    la      r0, 0xFF0000
-    lc      r1, 55
-    la      r2, .Lret_15
+demo_fib:
+    lc      r0, 0             ; a = 0
+    lc      r1, 1             ; b = 1
+    lc      r2, 10            ; counter
+
+.Lloop:
+    push    r0                ; save a
+    push    r2                ; save counter
+    ; print b (current fib number)
+    mov     r0, r1            ; r0 = b
+    push    r1                ; save b
+    la      r2, .Lpret
     push    r2
-    la      r2, mmio_write
-    jmp     (r2)
-    .Lret_15:
-.LBB7_1:
-    bra     .LBB7_1
+    bra     print_num
+.Lpret:
+    pop     r1                ; restore b
+    pop     r2                ; restore counter
 
-fibonacci:
-    lc      r1, 2
-    clu     r0, r1
-    brf     .LBB11_2
-    mov     r1, r0
-    bra     .LBB11_4
-.LBB11_2:
-    lc      r2, 2
-    lc      r0, 0
-    sw      r0, 24(fp)
-    lc      r1, 1
-.LBB11_3:
-    sw      r1, 21(fp)
-    lw      r1, 24(fp)
-    lw      r0, 21(fp)
-    add     r1, r0
-    add     r2, 1
-    clu     r0, r2
-    lw      r0, 21(fp)
-    sw      r0, 24(fp)
-    brf     .LBB11_3
-.LBB11_4:
-    mov     r0, r1
+    ; print space unless last
+    push    r0
+    lc      r0, 1
+    ceq     r0, r2            ; 1 == counter? (last)
+    pop     r0
+    brt     .Lskip
+    push    r1
+    push    r2
+    lc      r0, 32            ; ' '
+    la      r2, .Lspret
+    push    r2
+    bra     putc
+.Lspret:
+    pop     r2
+    pop     r1
+.Lskip:
+    ; advance: a=old_b, b=old_a+old_b
+    pop     r0                ; old a
+    push    r1                ; save old b
+    add     r1, r0            ; b = a + b
+    pop     r0                ; a = old b
+
+    push    r0
+    lc      r0, 1
+    sub     r2, r0            ; counter--
+    pop     r0
+    ceq     r2, z
+    brf     .Lloop
+
+    ; newline
+    lc      r0, 10
+    la      r2, .Lhalt
+    push    r2
+    bra     putc
+.Lhalt:
+    bra     .Lhalt
+
+; print_num: print r0 as 1-2 digit decimal
+print_num:
+    lc      r1, 0             ; tens = 0
+.Ldiv:
+    lc      r2, 10
+    clu     r0, r2            ; r0 < 10?
+    brt     .Lones
+    sub     r0, r2
+    add     r1, 1             ; tens++
+    bra     .Ldiv
+.Lones:
+    push    r0                ; save ones
+    ceq     r1, z             ; tens == 0?
+    brt     .Lnotens
+    push    r1
+    lc      r0, 48
+    add     r0, r1            ; '0' + tens
+    la      r2, .Ltret
+    push    r2
+    bra     putc
+.Ltret:
+    pop     r1
+.Lnotens:
+    pop     r0                ; ones
+    lc      r1, 48
+    add     r0, r1            ; '0' + ones
+    la      r2, .Loret
+    push    r2
+    bra     putc
+.Loret:
     pop     r2
     jmp     (r2)
 
-mmio_write:
-    sw      r1, 0(r0)
+; putc: poll TX busy, send byte in r0
+putc:
+    push    r0
+    la      r1, 0xFF0100
+.Lwait:
+    lb      r2, 1(r1)
+    lcu     r0, 128
+    and     r2, r0
+    ceq     r2, z
+    brf     .Lwait
+    pop     r0
+    sb      r0, 0(r1)
     pop     r2
     jmp     (r2)"#.to_string(),
         },

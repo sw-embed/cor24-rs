@@ -97,6 +97,45 @@ fn test_all_examples_assemble() {
     }
 }
 
+/// Test Fibonacci example prints correct series to UART
+#[test]
+fn test_fibonacci_example() {
+    let mut assembler = Assembler::new();
+    let examples = get_examples();
+    let fib = examples.iter().find(|(name, _, _)| name == "Fibonacci").unwrap();
+    let result = assembler.assemble(&fib.2);
+    assert!(result.errors.is_empty(), "Fibonacci assembly errors: {:?}", result.errors);
+    let mut cpu = CpuState::new();
+    for (addr, byte) in result.bytes.iter().enumerate() {
+        cpu.memory[addr] = *byte;
+    }
+    cpu.pc = 0;
+    let executor = Executor::new();
+    executor.run(&mut cpu, 100_000);
+    assert_eq!(
+        cpu.io.uart_output, "1 1 2 3 5 8 13 21 34 55\n",
+        "Fibonacci should print series"
+    );
+}
+
+/// Test Multiply example prints correct result to UART
+#[test]
+fn test_multiply_example() {
+    let mut assembler = Assembler::new();
+    let examples = get_examples();
+    let mul = examples.iter().find(|(name, _, _)| name == "Multiply").unwrap();
+    let result = assembler.assemble(&mul.2);
+    assert!(result.errors.is_empty(), "Multiply assembly errors: {:?}", result.errors);
+    let mut cpu = CpuState::new();
+    for (addr, byte) in result.bytes.iter().enumerate() {
+        cpu.memory[addr] = *byte;
+    }
+    cpu.pc = 0;
+    let executor = Executor::new();
+    executor.run(&mut cpu, 10_000);
+    assert_eq!(cpu.io.uart_output, "42\n", "Multiply should print '42\\n'");
+}
+
 /// Test that UART Hello example with TX busy polling assembles and runs correctly
 #[test]
 fn test_uart_hello_example() {
