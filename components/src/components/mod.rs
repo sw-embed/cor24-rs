@@ -1,5 +1,6 @@
 mod collapsible;
 mod debug_panel;
+mod example_picker;
 mod header;
 mod memory_viewer;
 mod modal;
@@ -11,6 +12,7 @@ mod tab_bar;
 
 pub use collapsible::*;
 pub use debug_panel::*;
+pub use example_picker::*;
 pub use header::*;
 pub use memory_viewer::*;
 pub use modal::*;

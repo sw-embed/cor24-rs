@@ -111,6 +111,8 @@ pub struct RustPipelineProps {
     #[prop_or_default]
     pub on_tutorial_open: Callback<()>,
     #[prop_or_default]
+    pub on_examples_open: Callback<()>,
+    #[prop_or_default]
     pub on_isa_ref_open: Callback<()>,
     #[prop_or_default]
     pub on_help_open: Callback<()>,
@@ -120,12 +122,6 @@ pub struct RustPipelineProps {
 pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
     // Wizard step state
     let current_step = use_state(|| WizardStep::Source);
-
-    // Load dialog state
-    let load_dialog_open = use_state(|| false);
-
-    // Selected example state
-    let selected_example = use_state(|| None::<RustExample>);
 
     // Auto-load "Blink LED" on first render
     {
@@ -139,68 +135,15 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
         });
     }
 
-    // Example selector callback
-    let on_example_select = {
-        let selected_example = selected_example.clone();
-        let examples = props.examples.clone();
-        Callback::from(move |e: Event| {
-            let target = e.target_dyn_into::<web_sys::HtmlSelectElement>();
-            if let Some(select) = target {
-                let idx = select.selected_index();
-                // Index 0 is "Choose an example...", so subtract 1 for actual examples
-                if idx > 0
-                    && let Some(example) = examples.get((idx - 1) as usize)
-                {
-                    selected_example.set(Some(example.clone()));
-                }
-            }
-        })
-    };
-
-    // Open load dialog - pre-select currently loaded example
-    let on_load_dialog_open = {
-        let load_dialog_open = load_dialog_open.clone();
-        let selected_example = selected_example.clone();
-        let loaded = props.loaded_example.clone();
-        Callback::from(move |_| {
-            if let Some(ex) = &loaded {
-                selected_example.set(Some(ex.clone()));
-            }
-            load_dialog_open.set(true);
-        })
-    };
-
-    // Close load dialog
-    let on_load_dialog_close = {
-        let load_dialog_open = load_dialog_open.clone();
-        Callback::from(move |_| {
-            load_dialog_open.set(false);
-        })
-    };
-
-    // Load example callback - resets to Source step and closes dialog
-    let on_load_click = {
-        let on_load = props.on_load.clone();
-        let selected = selected_example.clone();
+    // Reset wizard to Source step when a new example is loaded
+    {
         let current_step = current_step.clone();
-        let load_dialog_open = load_dialog_open.clone();
-        Callback::from(move |_| {
-            if let Some(example) = &*selected {
-                on_load.emit(example.clone());
-                current_step.set(WizardStep::Source);
-                load_dialog_open.set(false);
-                // Scroll notebook to top to show source cell
-                gloo::timers::callback::Timeout::new(50, || {
-                    if let Some(window) = web_sys::window()
-                        && let Some(document) = window.document()
-                        && let Some(container) = document.get_element_by_id("notebook-scroll")
-                    {
-                        container.set_scroll_top(0);
-                    }
-                }).forget();
-            }
-        })
-    };
+        let loaded_name = props.loaded_example.as_ref().map(|e| e.name.clone());
+        use_effect_with(loaded_name, move |_| {
+            current_step.set(WizardStep::Source);
+            || ()
+        });
+    }
 
     // Advance to next wizard step with scroll
     let advance_step = {
@@ -272,7 +215,10 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
                         let cb = props.on_tutorial_open.clone();
                         Callback::from(move |_| cb.emit(()))
                     }>{"Tutorial"}</button>
-                    <button onclick={on_load_dialog_open.clone()}>{"Examples"}</button>
+                    <button onclick={
+                        let cb = props.on_examples_open.clone();
+                        Callback::from(move |_| cb.emit(()))
+                    }>{"Examples"}</button>
                     <button onclick={
                         let cb = props.on_isa_ref_open.clone();
                         Callback::from(move |_| cb.emit(()))
@@ -316,12 +262,8 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
                     }
                 })}
 
-                // Action button - Load when not loaded, then Compile/Disassemble/etc.
-                if !props.is_loaded {
-                    <button class="wizard-action-btn" onclick={on_load_dialog_open.clone()} disabled={props.is_running}>
-                        {"Load"}
-                    </button>
-                } else if *current_step != WizardStep::Assemble {
+                // Action button - Compile/Translate/Assemble (or nothing at final step)
+                if props.is_loaded && *current_step != WizardStep::Assemble {
                     <button class="wizard-action-btn" onclick={advance_step.clone()}>
                         {(*current_step).action_label()}
                     </button>
@@ -405,39 +347,6 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
             </div>
 
             // Load Example Dialog
-            if *load_dialog_open {
-                <div class="wizard-dialog-overlay" onclick={on_load_dialog_close.clone()}>
-                    <div class="wizard-dialog" onclick={Callback::from(|e: MouseEvent| e.stop_propagation())}>
-                        <div class="wizard-dialog-header">
-                            <h3>{"Load Example"}</h3>
-                            <button class="wizard-dialog-close" onclick={on_load_dialog_close.clone()}>{"×"}</button>
-                        </div>
-                        <div class="wizard-dialog-body">
-                            <label>{"Select an example:"}</label>
-                            <select class="wizard-dialog-select" onchange={on_example_select} disabled={props.is_running}>
-                                <option value="" selected={selected_example.is_none()} disabled={true}>
-                                    {"Choose an example..."}
-                                </option>
-                                {for props.examples.iter().map(|ex| {
-                                    let is_selected = match &*selected_example {
-                                        Some(sel) => sel.name == ex.name,
-                                        None => false,
-                                    };
-                                    html! {
-                                        <option value={ex.name.clone()} selected={is_selected}>
-                                            {&ex.name}{" - "}{&ex.description}
-                                        </option>
-                                    }
-                                })}
-                            </select>
-                        </div>
-                        <div class="wizard-dialog-footer">
-                            <button class="wizard-dialog-cancel" onclick={on_load_dialog_close}>{"Cancel"}</button>
-                            <button class="wizard-dialog-load" onclick={on_load_click} disabled={props.is_running || selected_example.is_none()}>{"Load"}</button>
-                        </div>
-                    </div>
-                </div>
-            }
         </div>
     }
 }

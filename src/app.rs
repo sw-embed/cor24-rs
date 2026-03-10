@@ -4,7 +4,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use components::{
-    DebugPanel, Header, Modal, ProgramArea,
+    DebugPanel, ExampleItem, ExamplePicker, Header, Modal, ProgramArea,
     EmulatorState, RustExample, RustPipeline, Sidebar, SidebarButton, Tab, TabBar,
 };
 use yew::prelude::*;
@@ -53,6 +53,7 @@ pub fn app() -> Html {
     // Modal states
     let tutorial_open = use_state(|| false);
     let examples_open = use_state(|| false);
+    let rust_examples_open = use_state(|| false);
     let challenges_open = use_state(|| false);
     let isa_ref_open = use_state(|| false);
     let help_open = use_state(|| false);
@@ -65,6 +66,10 @@ pub fn app() -> Html {
     let close_examples = {
         let examples_open = examples_open.clone();
         Callback::from(move |_| examples_open.set(false))
+    };
+    let close_rust_examples = {
+        let rust_examples_open = rust_examples_open.clone();
+        Callback::from(move |_| rust_examples_open.set(false))
     };
     let close_challenges = {
         let challenges_open = challenges_open.clone();
@@ -870,9 +875,9 @@ pub fn app() -> Html {
             // Rust Pipeline Tab Content - Full width wizard layout
             <div class={if *active_tab == "rust" { "rust-tab-content full-width" } else { "rust-tab-content hidden" }}>
                 <RustPipeline
-                    examples={rust_examples}
+                    examples={rust_examples.clone()}
                     loaded_example={(*rust_loaded_example).clone()}
-                    on_load={on_rust_load}
+                    on_load={on_rust_load.clone()}
                     on_step={on_rust_step}
                     on_run={on_rust_run}
                     on_stop={on_rust_stop}
@@ -885,6 +890,10 @@ pub fn app() -> Html {
                     on_tutorial_open={
                         let tutorial_open = tutorial_open.clone();
                         Callback::from(move |_| tutorial_open.set(true))
+                    }
+                    on_examples_open={
+                        let rust_examples_open = rust_examples_open.clone();
+                        Callback::from(move |_| rust_examples_open.set(true))
                     }
                     on_isa_ref_open={
                         let isa_ref_open = isa_ref_open.clone();
@@ -990,44 +999,55 @@ pub fn app() -> Html {
                 {Html::from_html_unchecked(AttrValue::from(TUTORIAL_CONTENT))}
             </Modal>
 
-            <Modal id="examples" title="Examples" active={*examples_open} on_close={close_examples}>
-                <div class="examples-list">
-                    {for examples.iter().enumerate().map(|(idx, (title, desc, code))| {
-                        let program_code = program_code.clone();
-                        let examples_open = examples_open.clone();
-                        let cpu = cpu.clone();
-                        let assembly_output = assembly_output.clone();
-                        let assembly_lines = assembly_lines.clone();
-                        let code = code.clone();
-                        let challenge_mode = challenge_mode.clone();
-                        let current_challenge_id = current_challenge_id.clone();
-                        let challenge_result = challenge_result.clone();
-
-                        let load_example = Callback::from(move |_: MouseEvent| {
-                            // Reset CPU
+            <ExamplePicker
+                id="asm-examples"
+                title="COR24 Assembler Examples"
+                examples={examples.iter().map(|(t, d, _)| ExampleItem { name: t.clone(), description: d.clone() }).collect::<Vec<_>>()}
+                active={*examples_open}
+                on_close={close_examples}
+                on_select={{
+                    let examples = examples.clone();
+                    let program_code = program_code.clone();
+                    let examples_open = examples_open.clone();
+                    let cpu = cpu.clone();
+                    let assembly_output = assembly_output.clone();
+                    let assembly_lines = assembly_lines.clone();
+                    let challenge_mode = challenge_mode.clone();
+                    let current_challenge_id = current_challenge_id.clone();
+                    let challenge_result = challenge_result.clone();
+                    Callback::from(move |idx: usize| {
+                        if let Some((_, _, code)) = examples.get(idx) {
                             cpu.set(WasmCpu::new());
                             assembly_output.set(None);
                             assembly_lines.set(Vec::new());
-
-                            // Exit challenge mode when loading an example
                             challenge_mode.set(false);
                             current_challenge_id.set(None);
                             challenge_result.set(None);
-
-                            // Load new code
                             program_code.set(code.clone());
                             examples_open.set(false);
-                        });
-
-                        html! {
-                            <div class="example-item" key={idx} onclick={load_example}>
-                                <h4>{title}</h4>
-                                <p>{desc}</p>
-                            </div>
                         }
-                    })}
-                </div>
-            </Modal>
+                    })
+                }}
+            />
+
+            <ExamplePicker
+                id="rust-examples"
+                title={format!("Rust \u{2192} MSP430 \u{2192} COR24 Examples")}
+                examples={rust_examples.iter().map(|ex| ExampleItem { name: ex.name.clone(), description: ex.description.clone() }).collect::<Vec<_>>()}
+                active={*rust_examples_open}
+                on_close={close_rust_examples}
+                on_select={{
+                    let rust_examples = rust_examples.clone();
+                    let on_rust_load = on_rust_load.clone();
+                    let rust_examples_open = rust_examples_open.clone();
+                    Callback::from(move |idx: usize| {
+                        if let Some(example) = rust_examples.get(idx) {
+                            on_rust_load.emit(example.clone());
+                            rust_examples_open.set(false);
+                        }
+                    })
+                }}
+            />
 
             <Modal id="challenges" title="Challenges" active={*challenges_open} on_close={close_challenges}>
                 {render_challenges_list(challenge_mode.clone(), current_challenge_id.clone(), program_code.clone(), challenges_open.clone())}
