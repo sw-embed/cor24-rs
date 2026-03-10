@@ -128,8 +128,18 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
     // Load dialog state
     let load_dialog_open = use_state(|| false);
 
-    // Selected example state - None means "Choose an example..." is shown
+    // Selected example state - default to "Blink LED" if available
     let selected_example = use_state(|| None::<RustExample>);
+    {
+        let selected_example = selected_example.clone();
+        let examples = props.examples.clone();
+        use_effect_with((), move |_| {
+            if let Some(blink) = examples.iter().find(|e| e.name == "Blink LED") {
+                selected_example.set(Some(blink.clone()));
+            }
+            || ()
+        });
+    }
 
     // Example selector callback
     let on_example_select = {
