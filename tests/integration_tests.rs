@@ -136,6 +136,89 @@ fn test_multiply_example() {
     assert_eq!(cpu.io.uart_output, "42\n", "Multiply should print '42\\n'");
 }
 
+/// Helper: assemble source, run, and return CPU state
+fn assemble_and_run(source: &str, max_cycles: u64) -> CpuState {
+    let mut assembler = Assembler::new();
+    let result = assembler.assemble(source);
+    assert!(result.errors.is_empty(), "Assembly errors: {:?}", result.errors);
+    let mut cpu = CpuState::new();
+    for (addr, byte) in result.bytes.iter().enumerate() {
+        cpu.memory[addr] = *byte;
+    }
+    cpu.pc = 0;
+    let executor = Executor::new();
+    executor.run(&mut cpu, max_cycles);
+    cpu
+}
+
+/// All examples that terminate must reach halted state
+#[test]
+fn test_all_examples_halt() {
+    // Examples that intentionally loop forever (no halt)
+    let non_halting = ["Blink LED", "Button Echo"];
+    let examples = get_examples();
+    for (name, _desc, source) in &examples {
+        if non_halting.contains(&name.as_str()) {
+            continue;
+        }
+        let mut assembler = Assembler::new();
+        let result = assembler.assemble(source);
+        if !result.errors.is_empty() {
+            continue; // skip broken examples (tested elsewhere)
+        }
+        let mut cpu = CpuState::new();
+        for (addr, byte) in result.bytes.iter().enumerate() {
+            cpu.memory[addr] = *byte;
+        }
+        cpu.pc = 0;
+        let executor = Executor::new();
+        executor.run(&mut cpu, 500_000);
+        assert!(
+            cpu.halted,
+            "Example '{}' did not halt within 500K cycles (PC=0x{:06X})",
+            name, cpu.pc
+        );
+    }
+}
+
+/// Self-branch halt detection works via single-step
+#[test]
+fn test_self_branch_halt_via_step() {
+    let cpu = assemble_and_run("lc r0,1\nhalt: bra halt", 100);
+    assert!(cpu.halted, "Self-branch should be detected as halt");
+    assert_eq!(cpu.pc, 0x0002, "PC should point at the bra instruction");
+}
+
+/// Step past halt: stepping a halted CPU should not change state
+#[test]
+fn test_step_halted_cpu_is_noop() {
+    let mut cpu = assemble_and_run("halt: bra halt", 100);
+    assert!(cpu.halted);
+    let pc_before = cpu.pc;
+    let cycles_before = cpu.cycles;
+    let executor = Executor::new();
+    executor.step(&mut cpu);
+    assert!(cpu.halted, "CPU should remain halted after step");
+    assert_eq!(cpu.pc, pc_before, "PC should not change");
+    assert_eq!(cpu.cycles, cycles_before, "Cycles should not change");
+}
+
+/// Memory Access example stores to non-adjacent blocks
+#[test]
+fn test_memory_access_non_adjacent() {
+    let examples = get_examples();
+    let mem = examples.iter().find(|(name, _, _)| name == "Memory Access").unwrap();
+    let cpu = assemble_and_run(&mem.2, 1000);
+    assert!(cpu.halted, "Memory Access should halt");
+    // Check first block at 0x0100
+    assert_eq!(cpu.read_byte(0x0100), 42, "Block 1: byte 0 should be 42");
+    assert_eq!(cpu.read_byte(0x0101), 42, "Block 1: byte 1 should be 42");
+    // Check second block at 0x0200
+    assert_eq!(cpu.read_byte(0x0200), 200, "Block 2: byte 0 should be 200");
+    // Gap between blocks should be zero
+    assert_eq!(cpu.read_byte(0x0150), 0, "Gap between blocks should be zero");
+}
+
 /// Test that UART Hello example with TX busy polling assembles and runs correctly
 #[test]
 fn test_uart_hello_example() {

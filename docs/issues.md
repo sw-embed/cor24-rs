@@ -72,7 +72,8 @@ Currently using pre-built examples (LED Blink, Add Function) until server infras
 
 ### Memory Viewer
 
-- ~~Only shows first 128 bytes~~ Now shows three regions: Program (0→program_end), Stack (around SP), I/O (0xFFFF80→)
+- ~~Only shows first 128 bytes~~ Now shows three regions: Program (0→program_end), Stack (around SP), I/O (LED/Switch at 0xFF0000, UART at 0xFF0100)
+- **Full-region display with zero-row collapsing** (planned): Show complete extent of every region but collapse consecutive all-zero 16-byte rows into a single summary line (e.g., `... 48 rows (768 bytes) all zero [000030–000320] ...`). If a non-zero row exists within a collapsed range, it splits into: (1) summary of zero rows before, (2) the non-zero row, (3) summary of zero rows after. Makes region boundaries explicit without filling the screen with zeros. See implementation-plan.md §5.1.
 - No scrolling to view full 16MB address space
 - No memory editing capability
 

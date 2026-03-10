@@ -268,6 +268,23 @@ impl WasmCpu {
     }
 }
 
+// ===== Sparse Memory Access (Rust-only, not wasm_bindgen) =====
+
+impl WasmCpu {
+    /// Get sparse SRAM representation: full 1MB region, only non-zero 16-byte rows included.
+    pub fn get_sparse_sram(&self) -> components::SparseMemory {
+        components::SparseMemory::from_slice(self.emu.sram(), 0x000000)
+    }
+
+    /// Get sparse EBR/Stack representation: 0xFEE000–0xFEEC00 (3 KB usable stack area).
+    pub fn get_sparse_ebr(&self) -> components::SparseMemory {
+        let ebr = self.emu.ebr();
+        // EBR is mapped at 0xFEE000. Stack area is 0xFEE000–0xFEEC00 (3072 bytes).
+        let stack_size = 0xC00.min(ebr.len()); // 3 KB
+        components::SparseMemory::from_slice(&ebr[..stack_size], 0xFEE000)
+    }
+}
+
 // ===== Challenge System =====
 
 /// Get number of available challenges

@@ -298,22 +298,30 @@ putc:   push    r0              ; save char
         ),
         (
             "Memory Access".to_string(),
-            "Store and load values from memory".to_string(),
-            r#"; Memory Access: Store and load values
-; Store values to memory and read them back
+            "Store to non-adjacent memory blocks".to_string(),
+            r#"; Memory Access: Store and load from non-adjacent regions
+; Writes to 0x0100 and 0x0200 (256 bytes apart)
+; Demonstrates memory viewer zero-row collapsing
 
-        lc      r0,100      ; Value to store
-        la      r1,0x0080   ; Address just past program area
+        lc      r0,42       ; First value
+        la      r1,0x0100   ; First address block
 
-        ; Store byte
-        sb      r0,0(r1)    ; mem[0x0080] = 100
+        ; Store to first block at 0x0100
+        sb      r0,0(r1)    ; mem[0x0100] = 42
+        sb      r0,1(r1)    ; mem[0x0101] = 42
 
-        ; Store word (3 bytes)
-        sw      r0,4(r1)    ; mem[0x0084..87] = 100
+        lcu     r0,200      ; Second value
+        la      r1,0x0200   ; Second address block (256 bytes away)
 
-        ; Load them back
-        lb      r2,0(r1)    ; r2 = mem[0x0080] = 100
-        lw      r2,4(r1)    ; r2 = mem[0x0084] = 100
+        ; Store to second block at 0x0200
+        sb      r0,0(r1)    ; mem[0x0200] = 200
+        sw      r0,4(r1)    ; mem[0x0204..06] = 200
+
+        ; Load them back to verify
+        la      r1,0x0100
+        lb      r2,0(r1)    ; r2 = 42
+        la      r1,0x0200
+        lw      r2,4(r1)    ; r2 = 200
 
 halt:   bra     halt
 "#

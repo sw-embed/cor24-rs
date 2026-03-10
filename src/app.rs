@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use components::{
     DebugPanel, ExampleItem, ExamplePicker, Header, Modal, ProgramArea,
-    EmulatorState, RustExample, RustPipeline, Sidebar, SidebarButton, Tab, TabBar, Tooltip,
+    EmulatorState, RustExample, RustPipeline, Sidebar, SidebarButton, SparseMemory, Tab, TabBar, Tooltip,
 };
 use yew::prelude::*;
 
@@ -374,27 +374,16 @@ pub fn app() -> Html {
                 for (i, &val) in regs.iter().enumerate().take(8) {
                     registers[i] = val;
                 }
-                // Capture low memory (0x000000-0x00007F) - 128 bytes
-                let mut memory_low = Vec::new();
-                for addr in 0x000000..0x000080 {
-                    memory_low.push(new_cpu.read_byte(addr));
-                }
-                // I/O regions: LED/Switch (0xFF0000, 32 bytes) and UART (0xFF0100, 16 bytes)
-                let mut memory_io_led = Vec::with_capacity(32);
-                for addr in 0xFF0000..0xFF0020 {
+                let memory_low = new_cpu.get_sparse_sram();
+                let mut memory_io_led = Vec::with_capacity(16);
+                for addr in 0xFF0000..0xFF0010 {
                     memory_io_led.push(new_cpu.read_byte(addr));
                 }
                 let mut memory_io_uart = Vec::with_capacity(16);
                 for addr in 0xFF0100..0xFF0110 {
                     memory_io_uart.push(new_cpu.read_byte(addr));
                 }
-                // Capture stack region (64 bytes around SP)
-                let sp = new_cpu.read_register(4);
-                // Stack: show from 16-byte-aligned SP up to 0xFEEC00, minimum 16 bytes
-                let stack_top: u32 = 0xFEEC00;
-                let aligned_start = (sp.min(stack_top - 16)) & !0xF;
-                let stack_size = (stack_top - aligned_start).min(256);
-                let memory_stack = new_cpu.get_memory_slice(aligned_start, stack_size);
+                let memory_stack = new_cpu.get_sparse_ebr();
                 let program_end = new_cpu.get_program_end();
 
                 rust_emu_state.set(EmulatorState {
@@ -412,7 +401,6 @@ pub fn app() -> Html {
                     memory_io_led: memory_io_led.clone(),
                     memory_io_uart: memory_io_uart.clone(),
                     memory_stack: memory_stack.clone(),
-                    stack_base_addr: aligned_start,
                     program_end,
                     prev_memory_low: memory_low.clone(),
                     prev_memory_io_led: memory_io_led.clone(),
@@ -459,27 +447,16 @@ pub fn app() -> Html {
                 for (i, &val) in regs.iter().enumerate().take(8) {
                     registers[i] = val;
                 }
-                // Capture low memory (0x000000-0x00007F) - 128 bytes
-                let mut memory_low = Vec::new();
-                for addr in 0x000000..0x000080 {
-                    memory_low.push(new_cpu.read_byte(addr));
-                }
-                // I/O regions: LED/Switch (0xFF0000, 32 bytes) and UART (0xFF0100, 16 bytes)
-                let mut memory_io_led = Vec::with_capacity(32);
-                for addr in 0xFF0000..0xFF0020 {
+                let memory_low = new_cpu.get_sparse_sram();
+                let mut memory_io_led = Vec::with_capacity(16);
+                for addr in 0xFF0000..0xFF0010 {
                     memory_io_led.push(new_cpu.read_byte(addr));
                 }
                 let mut memory_io_uart = Vec::with_capacity(16);
                 for addr in 0xFF0100..0xFF0110 {
                     memory_io_uart.push(new_cpu.read_byte(addr));
                 }
-                // Capture stack region (64 bytes around SP)
-                let sp = new_cpu.read_register(4);
-                // Stack: show from 16-byte-aligned SP up to 0xFEEC00, minimum 16 bytes
-                let stack_top: u32 = 0xFEEC00;
-                let aligned_start = (sp.min(stack_top - 16)) & !0xF;
-                let stack_size = (stack_top - aligned_start).min(256);
-                let memory_stack = new_cpu.get_memory_slice(aligned_start, stack_size);
+                let memory_stack = new_cpu.get_sparse_ebr();
 
                 rust_emu_state.set(EmulatorState {
                     registers,
@@ -496,7 +473,6 @@ pub fn app() -> Html {
                     memory_io_led,
                     memory_io_uart,
                     memory_stack,
-                    stack_base_addr: aligned_start,
                     program_end: new_cpu.get_program_end(),
                     prev_memory_low: prev_state.memory_low,
                     prev_memory_io_led: prev_state.memory_io_led,
@@ -559,14 +535,14 @@ pub fn app() -> Html {
                     asm_lines: Vec<String>,
                     prev_regs: [u32; 8],
                     prev_prev_regs: [u32; 8],
-                    prev_mem_low: Vec<u8>,
+                    prev_mem_low: SparseMemory,
                     prev_mem_io_led: Vec<u8>,
                     prev_mem_io_uart: Vec<u8>,
-                    prev_mem_stack: Vec<u8>,
-                    prev_prev_mem_low: Vec<u8>,
+                    prev_mem_stack: SparseMemory,
+                    prev_prev_mem_low: SparseMemory,
                     prev_prev_mem_io_led: Vec<u8>,
                     prev_prev_mem_io_uart: Vec<u8>,
-                    prev_prev_mem_stack: Vec<u8>,
+                    prev_prev_mem_stack: SparseMemory,
                     steps: u32,
                     stop_flag: Rc<Cell<bool>>,
                     switch_state: Rc<Cell<u8>>,
@@ -605,27 +581,16 @@ pub fn app() -> Html {
                     for (i, &val) in regs.iter().enumerate().take(8) {
                         registers[i] = val;
                     }
-                    // Capture low memory (0x000000-0x00007F) - 128 bytes
-                    let mut memory_low = Vec::new();
-                    for addr in 0x000000..0x000080 {
-                        memory_low.push(current_cpu.read_byte(addr));
-                    }
-                    // I/O regions: LED/Switch (0xFF0000, 32 bytes) and UART (0xFF0100, 16 bytes)
-                    let mut memory_io_led = Vec::with_capacity(32);
-                    for addr in 0xFF0000..0xFF0020 {
+                    let memory_low = current_cpu.get_sparse_sram();
+                    let mut memory_io_led = Vec::with_capacity(16);
+                    for addr in 0xFF0000..0xFF0010 {
                         memory_io_led.push(current_cpu.read_byte(addr));
                     }
                     let mut memory_io_uart = Vec::with_capacity(16);
                     for addr in 0xFF0100..0xFF0110 {
                         memory_io_uart.push(current_cpu.read_byte(addr));
                     }
-                    // Capture stack region (64 bytes around SP)
-                    let sp = current_cpu.read_register(4);
-                    // Stack: show from 16-byte-aligned SP up to 0xFEEC00, minimum 16 bytes
-                    let stack_top: u32 = 0xFEEC00;
-                    let aligned_start = (sp.min(stack_top - 16)) & !0xF;
-                    let stack_size = (stack_top - aligned_start).min(256);
-                    let memory_stack = current_cpu.get_memory_slice(aligned_start, stack_size);
+                    let memory_stack = current_cpu.get_sparse_ebr();
 
                     // Save current values as prev for next iteration
                     let next_prev_regs = registers;
@@ -658,7 +623,6 @@ pub fn app() -> Html {
                         memory_io_led,
                         memory_io_uart,
                         memory_stack,
-                        stack_base_addr: aligned_start,
                         program_end: current_cpu.get_program_end(),
                         prev_memory_low: prev_mem_low,
                         prev_memory_io_led: prev_mem_io_led,
@@ -735,26 +699,16 @@ pub fn app() -> Html {
                     for (i, &val) in regs.iter().enumerate().take(8) {
                         registers[i] = val;
                     }
-                    // Capture low memory (0x000000-0x00007F) - 128 bytes
-                    let mut memory_low = Vec::new();
-                    for addr in 0x000000..0x000080 {
-                        memory_low.push(new_cpu.read_byte(addr));
-                    }
-                    // I/O regions: LED/Switch (0xFF0000, 32 bytes) and UART (0xFF0100, 16 bytes)
-                    let mut memory_io_led = Vec::with_capacity(32);
-                    for addr in 0xFF0000..0xFF0020 {
+                    let memory_low = new_cpu.get_sparse_sram();
+                    let mut memory_io_led = Vec::with_capacity(16);
+                    for addr in 0xFF0000..0xFF0010 {
                         memory_io_led.push(new_cpu.read_byte(addr));
                     }
                     let mut memory_io_uart = Vec::with_capacity(16);
                     for addr in 0xFF0100..0xFF0110 {
                         memory_io_uart.push(new_cpu.read_byte(addr));
                     }
-                    // Capture stack region (top 16+ bytes, 16-byte aligned)
-                    let sp = new_cpu.read_register(4);
-                    let stack_top: u32 = 0xFEEC00;
-                    let aligned_start = (sp.min(stack_top - 16)) & !0xF;
-                    let stack_size = (stack_top - aligned_start).min(256);
-                    let memory_stack = new_cpu.get_memory_slice(aligned_start, stack_size);
+                    let memory_stack = new_cpu.get_sparse_ebr();
                     let program_end = new_cpu.get_program_end();
 
                     rust_emu_state.set(EmulatorState {
@@ -765,14 +719,13 @@ pub fn app() -> Html {
                         condition_flag: new_cpu.get_condition_flag(),
                         is_halted: new_cpu.is_halted(),
                         led_value: new_cpu.get_led_value(),
-                    led_duty_cycle: if (new_cpu.get_led_value() & 1) == 1 { 1.0 } else { 0.0 },
-                    led_on_count: 0,
+                        led_duty_cycle: if (new_cpu.get_led_value() & 1) == 1 { 1.0 } else { 0.0 },
+                        led_on_count: 0,
                         instruction_count: new_cpu.get_instruction_count(),
                         memory_low: memory_low.clone(),
                         memory_io_led: memory_io_led.clone(),
                         memory_io_uart: memory_io_uart.clone(),
                         memory_stack: memory_stack.clone(),
-                        stack_base_addr: aligned_start,
                         program_end,
                         prev_memory_low: memory_low.clone(),
                         prev_memory_io_led: memory_io_led.clone(),
@@ -1396,29 +1349,16 @@ fn capture_cpu_state(cpu: &WasmCpu, prev: &EmulatorState) -> EmulatorState {
         registers[i] = val;
     }
 
-    // Capture program + data memory: program area + 128 bytes for nearby data,
-    // minimum 256 bytes, 16-byte aligned, max 4KB.
-    let prog_end = cpu.get_program_end() as usize;
-    let low_size = ((prog_end + 128).max(256) & !0xF).min(0x1000);
-    let mut memory_low = Vec::with_capacity(low_size);
-    for addr in 0..(low_size as u32) {
-        memory_low.push(cpu.read_byte(addr));
-    }
-    // I/O regions: LED/Switch (0xFF0000, 32 bytes) and UART (0xFF0100, 16 bytes)
-    let mut memory_io_led = Vec::with_capacity(32);
-    for addr in 0xFF0000..0xFF0020 {
+    let memory_low = cpu.get_sparse_sram();
+    let mut memory_io_led = Vec::with_capacity(16);
+    for addr in 0xFF0000..0xFF0010 {
         memory_io_led.push(cpu.read_byte(addr));
     }
     let mut memory_io_uart = Vec::with_capacity(16);
     for addr in 0xFF0100..0xFF0110 {
         memory_io_uart.push(cpu.read_byte(addr));
     }
-
-    let sp = cpu.read_register(4);
-    let stack_top: u32 = 0xFEEC00;
-    let aligned_start = (sp.min(stack_top - 16)) & !0xF;
-    let stack_size = (stack_top - aligned_start).min(256);
-    let memory_stack = cpu.get_memory_slice(aligned_start, stack_size);
+    let memory_stack = cpu.get_sparse_ebr();
 
     EmulatorState {
         registers,
@@ -1435,7 +1375,6 @@ fn capture_cpu_state(cpu: &WasmCpu, prev: &EmulatorState) -> EmulatorState {
         memory_io_led: memory_io_led.clone(),
         memory_io_uart: memory_io_uart.clone(),
         memory_stack: memory_stack.clone(),
-        stack_base_addr: aligned_start,
         program_end: cpu.get_program_end(),
         prev_memory_low: prev.memory_low.clone(),
         prev_memory_io_led: prev.memory_io_led.clone(),
@@ -1894,68 +1833,61 @@ putc:
         // Demo 6: Memory Access
         RustExample {
             name: "Memory Access".to_string(),
-            description: "Store and load values from memory".to_string(),
+            description: "Store to non-adjacent memory blocks".to_string(),
             rust_source: r#"#[no_mangle]
 pub unsafe fn demo_memory() {
-    let addr: *mut u8 = 0x0080 as *mut u8;
-    let val: u8 = 100;
+    // Write to two non-adjacent memory blocks
+    let block1: *mut u8 = 0x0100 as *mut u8;
+    let block2: *mut u8 = 0x0200 as *mut u8;
 
-    // Store byte
-    *addr = val;
+    // Store to first block at 0x0100
+    *block1 = 42;
+    *block1.add(1) = 42;
 
-    // Store word (at offset +4)
-    let waddr: *mut u16 = 0x0084 as *mut u16;
-    *waddr = val as u16;
+    // Store to second block at 0x0200
+    *block2 = 200;
+    *(0x0204 as *mut u16) = 200;
 
-    // Load them back
-    let b = *addr;           // 100
-    let w = *waddr;          // 100
+    // Load back to verify
+    let a = *block1;         // 42
+    let b = *(0x0204 as *mut u16);  // 200
 
-    // Show result on LED
-    mmio_write(LED_ADDR, (b as u16) + w);
     loop {}  // halt
 }"#.to_string(),
             msp430_asm: r#"demo_memory:
-	mov	#100, r12
-	mov.b	r12, &0x0080      ; store byte
-	mov	r12, &0x0084      ; store word
-	mov.b	&0x0080, r13      ; load byte
-	add	&0x0084, r13      ; load word, add
-	mov	#-256, r12
-	call	#mmio_write
+	mov.b	#42, &0x0100      ; store byte to block 1
+	mov.b	#42, &0x0101      ; store byte to block 1
+	mov.b	#200, &0x0200     ; store byte to block 2
+	mov	#200, &0x0204     ; store word to block 2
+	mov.b	&0x0100, r12      ; load from block 1
+	mov	&0x0204, r13      ; load from block 2
 .LBB_1:
 	jmp	.LBB_1"#.to_string(),
-            cor24_assembly: r#"; --- demo_memory: store and load values from memory ---
+            cor24_assembly: r#"; --- demo_memory: store to non-adjacent memory blocks ---
+; Writes to 0x0100 and 0x0200 (256 bytes apart)
 demo_memory:
-    lc      r0, 100           ; val = 100
-    la      r1, 0x000080      ; addr = 0x0080
+    lc      r0, 42            ; first value
+    la      r1, 0x000100      ; first block address
 
-    ; Store byte
-    sb      r0, 0(r1)         ; mem[0x0080] = 100
+    ; Store to first block at 0x0100
+    sb      r0, 0(r1)         ; mem[0x0100] = 42
+    sb      r0, 1(r1)         ; mem[0x0101] = 42
 
-    ; Store word (at offset +4)
-    sw      r0, 4(r1)         ; mem[0x0084..87] = 100
+    lcu     r0, 200           ; second value
+    la      r1, 0x000200      ; second block (256 bytes away)
 
-    ; Load them back
-    lb      r2, 0(r1)         ; r2 = mem[0x0080] = 100
-    lw      r3, 4(r1)         ; r3 = mem[0x0084] = 100
+    ; Store to second block at 0x0200
+    sb      r0, 0(r1)         ; mem[0x0200] = 200
+    sw      r0, 4(r1)         ; mem[0x0204..06] = 200
 
-    ; Show result on LED: 100 + 100 = 200
-    add     r2, r3
-    la      r0, 0xFF0000
-    mov     r1, r2
-    la      r3, .Lret_0
-    push    r3
-    la      r3, mmio_write
-    jmp     (r3)
-    .Lret_0:
-.LBB_1:
-    bra     .LBB_1
+    ; Load back to verify
+    la      r1, 0x000100
+    lb      r2, 0(r1)         ; r2 = 42
+    la      r1, 0x000200
+    lw      r2, 4(r1)         ; r2 = 200
 
-mmio_write:
-    sw      r1, 0(r0)
-    pop     r2
-    jmp     (r2)"#.to_string(),
+halt:
+    bra     halt"#.to_string(),
         },
         // Demo 7: Software Multiply
         RustExample {

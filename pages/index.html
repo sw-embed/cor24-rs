@@ -6,12 +6,12 @@
     <title>MakerLisp COR24 — Assembly Emulator</title>
     
     <link rel="icon" type="image/x-icon" href="favicon.ico">
-    <link rel="stylesheet" href="/cor24-rs/asm-game-2ad49d5a21d9972f.css" integrity="sha384-bdWlxwx1zd90pVHRF83PAl60bfaagdQYlFFNL94F77oa7HSr+Z+vD9K686kHgk2m"/>
+    <link rel="stylesheet" href="/cor24-rs/asm-game-caa82fa5818a7fe1.css" integrity="sha384-JSyWlY0kSb9jLGT5uAgWjqRHF44exrU+xxGJn+hr5sEahhZe1X096TgWPoYxu5ko"/>
     <link rel="stylesheet" href="/cor24-rs/layout-6e4d62a1b108a303.css" integrity="sha384-KVoLnja2jf+U49Cmp0Mk3e24HGGkC/NdviQJTILOqBcK3y2vERSTs5k56lF6r8bZ"/>
     
 <script type="module">
-import init, * as bindings from '/cor24-rs/cor24-emulator-f2f8b3e9a1176ed0.js';
-const wasm = await init({ module_or_path: '/cor24-rs/cor24-emulator-f2f8b3e9a1176ed0_bg.wasm' });
+import init, * as bindings from '/cor24-rs/cor24-emulator-779722d0baee4dae.js';
+const wasm = await init({ module_or_path: '/cor24-rs/cor24-emulator-779722d0baee4dae_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -20,7 +20,7 @@ window.wasmBindings = bindings;
 dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
 
 </script>
-<link rel="modulepreload" href="/cor24-rs/cor24-emulator-f2f8b3e9a1176ed0.js" crossorigin="anonymous" integrity="sha384-CWkaf/HJ9WW8ysdGOWNTV2Evi/14MxVSrg775eiONA9y4FClVCf+jhKREaD7z0GJ"><link rel="preload" href="/cor24-rs/cor24-emulator-f2f8b3e9a1176ed0_bg.wasm" crossorigin="anonymous" integrity="sha384-ukhrkeRGhK5VFrZMLz4t11f4NPy5rKQiDBxxP/uBe1kMpagEhlZ6UTgLUwsO20IF" as="fetch" type="application/wasm"></head>
+<link rel="modulepreload" href="/cor24-rs/cor24-emulator-779722d0baee4dae.js" crossorigin="anonymous" integrity="sha384-NOMLvMy5VIChmQuIVRnl4RnZbNbCBlXYrNgrZ9EuL3pJnT5M52ZSzMA+inLvjm3z"><link rel="preload" href="/cor24-rs/cor24-emulator-779722d0baee4dae_bg.wasm" crossorigin="anonymous" integrity="sha384-i1ORhssKMEHbn8hYkgbxer2Vv9BZcmz5BB9v/snNRxmO9JwS2hxE6+62SOHHjqGy" as="fetch" type="application/wasm"></head>
 <body>
 </body>
 </html>

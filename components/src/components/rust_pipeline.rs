@@ -16,6 +16,33 @@ pub struct RustExample {
     pub cor24_assembly: String,
 }
 
+/// Sparse memory representation: only non-zero 16-byte rows within a region.
+/// The display renders summary lines for zero gaps between non-zero rows.
+#[derive(Clone, PartialEq, Default)]
+pub struct SparseMemory {
+    pub region_start: u32,  // First address of the region
+    pub region_end: u32,    // Last address + 1 (exclusive)
+    /// Non-zero rows: (row_start_address, 16 bytes). Sorted by address.
+    pub rows: Vec<(u32, Vec<u8>)>,
+}
+
+impl SparseMemory {
+    /// Build from a byte slice representing memory at `base_addr..base_addr+data.len()`.
+    pub fn from_slice(data: &[u8], base_addr: u32) -> Self {
+        let mut rows = Vec::new();
+        for (i, chunk) in data.chunks(16).enumerate() {
+            if chunk.iter().any(|&b| b != 0) {
+                rows.push((base_addr + (i * 16) as u32, chunk.to_vec()));
+            }
+        }
+        SparseMemory {
+            region_start: base_addr,
+            region_end: base_addr + data.len() as u32,
+            rows,
+        }
+    }
+}
+
 /// CPU state for display in the Rust pipeline execution panel
 #[derive(Clone, PartialEq, Default)]
 pub struct EmulatorState {
@@ -29,20 +56,19 @@ pub struct EmulatorState {
     pub led_duty_cycle: f32,  // 0.0 (always off) to 1.0 (always on) over Run
     pub led_on_count: u64,    // Instructions executed with LED on (cumulative during Run)
     pub instruction_count: u32,
-    pub memory_low: Vec<u8>,
-    pub memory_io_led: Vec<u8>,         // I/O: LED/Switch at 0xFF0000 (32 bytes)
+    pub memory_low: SparseMemory,       // SRAM (0x000000-0x0FFFFF)
+    pub memory_io_led: Vec<u8>,         // I/O: LED/Switch at 0xFF0000 (16 bytes)
     pub memory_io_uart: Vec<u8>,        // I/O: UART at 0xFF0100 (16 bytes)
-    pub memory_stack: Vec<u8>,          // Stack region around SP
-    pub stack_base_addr: u32,           // Base address of stack region
+    pub memory_stack: SparseMemory,     // EBR/Stack (0xFEE000-0xFEEC00)
     pub program_end: u32,               // End of code+data region
-    pub prev_memory_low: Vec<u8>,
+    pub prev_memory_low: SparseMemory,
     pub prev_memory_io_led: Vec<u8>,
     pub prev_memory_io_uart: Vec<u8>,
-    pub prev_memory_stack: Vec<u8>,
-    pub prev_prev_memory_low: Vec<u8>,
+    pub prev_memory_stack: SparseMemory,
+    pub prev_prev_memory_low: SparseMemory,
     pub prev_prev_memory_io_led: Vec<u8>,
     pub prev_prev_memory_io_uart: Vec<u8>,
-    pub prev_prev_memory_stack: Vec<u8>,
+    pub prev_prev_memory_stack: SparseMemory,
     pub current_instruction: String,
     pub assembled_lines: Vec<String>,
     pub uart_output: String,

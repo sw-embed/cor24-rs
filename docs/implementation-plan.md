@@ -548,6 +548,56 @@ fn test_sieve_produces_correct_output() {
 - [x] program_end tracking for dynamic program region sizing
 - [ ] Update examples and challenges
 - [ ] Test in browser
+- [ ] Collapsed zero-row memory display (see §5.1)
+
+### 5.1 Feature: Full-Region Memory Display with Zero-Row Collapsing
+
+**Goal**: Show the complete extent of every memory region, making the address
+ranges explicit, without filling the screen with rows of zeros.
+
+**Current behavior**: Each memory region displays a fixed small window
+(e.g., 16 bytes for LED I/O, 16 bytes for UART, ~128 bytes for program area).
+The user cannot see the full region or understand its boundaries.
+
+**New behavior**: Display the full address range of each region. Consecutive
+16-byte rows that are all zero are collapsed into a single summary line
+showing the count of omitted rows and the byte range they cover.
+
+**Display rules**:
+
+1. For each memory region, iterate over all 16-byte rows from start to end.
+2. Non-zero rows are displayed normally (hex bytes with heatmap highlighting).
+3. Consecutive all-zero rows are collapsed into a single summary line:
+   ```
+   ... 48 rows (768 bytes) all zero [000030–000320] ...
+   ```
+4. If a program writes to an address deep in a previously collapsed range,
+   the collapsed region splits into up to 3 parts:
+   - Summary of zero rows before the non-zero row
+   - The non-zero row (displayed normally)
+   - Summary of zero rows after the non-zero row
+5. The first and last rows of each region are always shown (even if zero)
+   to make region boundaries explicit.
+
+**Regions and their full extents**:
+
+| Region | Start | End | Size | Notes |
+|--------|-------|-----|------|-------|
+| Program | 0x000000 | program_end (rounded up to 16) | variable | Already tracked |
+| Stack | 0xFEE000 | 0xFEEC00 | 3 KB | EBR, grows down from SP init |
+| I/O: LED/Switch | 0xFF0000 | 0xFF000F | 16 bytes | Single row, no collapsing needed |
+| I/O: UART | 0xFF0100 | 0xFF010F | 16 bytes | Single row, no collapsing needed |
+
+**Implementation notes**:
+
+- `format_memory_dump_all` in `debug_panel.rs` is the renderer to modify
+- The collapsing logic operates purely on the display data (`Vec<u8>`)
+  — no changes to CPU state or memory model
+- Heatmap highlighting (hot/warm) applies normally to non-zero rows
+- Summary lines use a distinct CSS class (e.g., `memory-row-collapsed`)
+  with dimmed text to visually distinguish them from data rows
+- The stack region should be displayed in reverse order (high→low) as
+  it currently is, with collapsing applied after reversal
 
 ---
 

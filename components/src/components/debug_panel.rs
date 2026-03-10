@@ -310,15 +310,15 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                     // Memory viewer - three regions
                     if props.is_loaded {
                         <div class="memory-section">
-                            <h4>{format!("Memory (0x000000 \u{2192} 0x{:06X}+)", state.program_end)}</h4>
+                            <h4>{format!("SRAM (0x{:06X}\u{2013}0x{:06X}, code ends 0x{:04X})", state.memory_low.region_start, state.memory_low.region_end - 1, state.program_end)}</h4>
                             <div class="memory-dump-compact">{
-                                format_memory_dump_heatmap_sparse(&state.memory_low, &state.prev_memory_low, &state.prev_prev_memory_low, 0x000000, state.program_end)
+                                format_sparse_memory(&state.memory_low, &state.prev_memory_low, &state.prev_prev_memory_low)
                             }</div>
                         </div>
                         <div class="memory-section">
-                            <h4>{format!("Stack (0xFEEC00 \u{2193} SP=0x{:06X})", state.registers[4])}</h4>
+                            <h4>{format!("EBR/Stack (0x{:06X}\u{2013}0x{:06X}, SP=0x{:06X})", state.memory_stack.region_start, state.memory_stack.region_end - 1, state.registers[4])}</h4>
                             <div class="memory-dump-compact">{
-                                format_memory_dump_reversed_heatmap(&state.memory_stack, &state.prev_memory_stack, &state.prev_prev_memory_stack, state.stack_base_addr)
+                                format_sparse_memory_reversed(&state.memory_stack, &state.prev_memory_stack, &state.prev_prev_memory_stack)
                             }</div>
                         </div>
                         <div class="memory-section">
@@ -340,67 +340,29 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
     }
 }
 
-/// Format memory with heatmap, compressing contiguous all-zero rows into
-/// a single summary line showing the zero block's address range and size.
-fn format_memory_dump_heatmap_sparse(
-    data: &[u8], prev: &[u8], prev_prev: &[u8],
-    base_addr: u32, _program_end: u32,
-) -> Html {
-    // Classify each 16-byte row as zero or non-zero
-    let chunks: Vec<&[u8]> = data.chunks(16).collect();
-    let mut elements: Vec<Html> = Vec::new();
-    let mut i = 0;
-    while i < chunks.len() {
-        let chunk = chunks[i];
-        let all_zero = chunk.iter().all(|&b| b == 0);
-        if all_zero {
-            // Count contiguous all-zero rows
-            let start = i;
-            while i < chunks.len() && chunks[i].iter().all(|&b| b == 0) {
-                i += 1;
-            }
-            let zero_start = base_addr + (start * 16) as u32;
-            let zero_end = base_addr + (i * 16) as u32 - 1;
-            let zero_bytes = (i - start) * 16;
-            elements.push(html! {
-                <div class="memory-row memory-zero-block">
-                    <span class="memory-addr">{format!("{:06X}-{:06X}: ", zero_start, zero_end)}</span>
-                    <span class="mem-byte">{format!("({} bytes zero)", zero_bytes)}</span>
-                </div>
-            });
-        } else {
-            let addr = base_addr + (i * 16) as u32;
-            elements.push(format_memory_row(chunk, prev, prev_prev, i, addr));
-            i += 1;
-        }
-    }
+use crate::SparseMemory;
 
+/// Emit a zero-gap summary line for `gap_start..gap_end` (exclusive end).
+fn zero_summary(gap_start: u32, gap_end: u32) -> Html {
+    let bytes = gap_end - gap_start;
     html! {
-        <>{for elements.into_iter()}</>
+        <div class="memory-row memory-zero-block">
+            <span class="memory-addr">{format!("{:06X}\u{2013}{:06X}: ", gap_start, gap_end - 1)}</span>
+            <span class="mem-byte">{format!("({} bytes zero)", bytes)}</span>
+        </div>
     }
 }
 
-/// Format all memory rows with heatmap (no zero compression, for small I/O regions)
-fn format_memory_dump_all(data: &[u8], prev: &[u8], prev_prev: &[u8], base_addr: u32) -> Html {
-    html! {
-        <>
-            {for data.chunks(16).enumerate().map(|(i, chunk)| {
-                let addr = base_addr + (i * 16) as u32;
-                format_memory_row(chunk, prev, prev_prev, i, addr)
-            })}
-        </>
-    }
-}
-
-/// Format a single memory row with heatmap coloring
-fn format_memory_row(chunk: &[u8], prev: &[u8], prev_prev: &[u8], row_idx: usize, addr: u32) -> Html {
+/// Render a single non-zero memory row with heatmap coloring.
+/// `prev` and `prev_prev` are the SparseMemory from prior steps for change detection.
+fn sparse_data_row(addr: u32, data: &[u8], prev: &SparseMemory, prev_prev: &SparseMemory) -> Html {
     html! {
         <div class="memory-row">
             <span class="memory-addr">{format!("{:06X}: ", addr)}</span>
-            {for chunk.iter().enumerate().map(|(j, byte)| {
-                let idx = row_idx * 16 + j;
-                let prev_byte = prev.get(idx).copied().unwrap_or(0);
-                let prev_prev_byte = prev_prev.get(idx).copied().unwrap_or(0);
+            {for data.iter().enumerate().map(|(j, byte)| {
+                let a = addr + j as u32;
+                let prev_byte = sparse_lookup(prev, a);
+                let prev_prev_byte = sparse_lookup(prev_prev, a);
                 let is_hot = *byte != prev_byte;
                 let is_warm = !is_hot && prev_byte != prev_prev_byte;
                 let class = if is_hot {
@@ -418,12 +380,67 @@ fn format_memory_row(chunk: &[u8], prev: &[u8], prev_prev: &[u8], row_idx: usize
     }
 }
 
-/// Format memory as hex dump in reverse order with heat map highlighting (returns Html)
-fn format_memory_dump_reversed_heatmap(data: &[u8], prev: &[u8], prev_prev: &[u8], base_addr: u32) -> Html {
-    let chunks: Vec<_> = data.chunks(16).collect();
+/// Look up a byte in a SparseMemory. Returns 0 if the address is in a zero gap.
+fn sparse_lookup(sm: &SparseMemory, addr: u32) -> u8 {
+    let row_addr = addr & !0xF;
+    // Binary search for the row
+    if let Ok(idx) = sm.rows.binary_search_by_key(&row_addr, |&(a, _)| a) {
+        let offset = (addr - row_addr) as usize;
+        sm.rows[idx].1.get(offset).copied().unwrap_or(0)
+    } else {
+        0
+    }
+}
+
+/// Format sparse memory (forward order) with zero-gap summaries.
+fn format_sparse_memory(mem: &SparseMemory, prev: &SparseMemory, prev_prev: &SparseMemory) -> Html {
+    let mut elements: Vec<Html> = Vec::new();
+    let mut cursor = mem.region_start;
+
+    for (addr, data) in &mem.rows {
+        if *addr > cursor {
+            elements.push(zero_summary(cursor, *addr));
+        }
+        elements.push(sparse_data_row(*addr, data, prev, prev_prev));
+        cursor = *addr + data.len() as u32;
+    }
+
+    // Trailing zero gap
+    if cursor < mem.region_end {
+        elements.push(zero_summary(cursor, mem.region_end));
+    }
+
+    html! { <>{for elements.into_iter()}</> }
+}
+
+/// Format sparse memory in reverse order (high address first) with zero-gap summaries.
+/// Used for stack display where high addresses are at the top.
+fn format_sparse_memory_reversed(mem: &SparseMemory, prev: &SparseMemory, prev_prev: &SparseMemory) -> Html {
+    let mut elements: Vec<Html> = Vec::new();
+    let mut cursor = mem.region_end;
+
+    for (addr, data) in mem.rows.iter().rev() {
+        let row_end = *addr + data.len() as u32;
+        if cursor > row_end {
+            elements.push(zero_summary(row_end, cursor));
+        }
+        elements.push(sparse_data_row(*addr, data, prev, prev_prev));
+        cursor = *addr;
+    }
+
+    // Leading zero gap (lowest addresses)
+    if cursor > mem.region_start {
+        elements.push(zero_summary(mem.region_start, cursor));
+    }
+
+    html! { <>{for elements.into_iter()}</> }
+}
+
+/// Format all memory rows with heatmap (no zero compression, for small I/O regions)
+fn format_memory_dump_all(data: &[u8], prev: &[u8], prev_prev: &[u8], base_addr: u32) -> Html {
     html! {
         <>
-            {for chunks.iter().enumerate().rev().map(|(i, chunk)| {
+            {for data.chunks(16).enumerate().map(|(i, chunk)| {
                 let addr = base_addr + (i * 16) as u32;
                 html! {
                     <div class="memory-row">
