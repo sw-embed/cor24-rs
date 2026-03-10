@@ -54,9 +54,18 @@ instruction. All examples now use the standard idiom `halt: bra halt` (branch-to
 The `halt` pseudo-instruction has been removed from the assembler since it is not
 supported by the reference `as24` toolchain.
 
-### Interrupt Handling
+### ~~Interrupt Handling~~ (IMPLEMENTED)
 
-Interrupt handling (iv, ir registers) is defined but not fully tested. The UART interrupt example from references shows the pattern but the emulator doesn't simulate external interrupts.
+**Status**: Implemented on 2026-03-10
+
+UART RX interrupt support matching hardware behavior:
+- `intis` flag prevents nested interrupts
+- Automatic `jal r7,(r6)` at instruction boundary when UART RX ready AND interrupt enabled (`0xFF0010` bit 0)
+- `jmp (r7)` clears `intis` flag (interrupt return)
+- ISR must read UART data register (`0xFF0100`) to acknowledge interrupt
+- `lb`/`lbu` instructions use `read_byte_exec` to auto-clear UART RX ready on read
+- Example program: `docs/examples/interrupt.s`
+- COR24 has only one interrupt source (UART RX) — no external pins, timer, or GPIO interrupts
 
 ## Web UI
 
@@ -114,16 +123,16 @@ Only one screenshot exists (`images/cor24-interface-2026-02-26T05-07-30-868Z.png
 
 ## Testing
 
-### Test Coverage (183 tests)
+### Test Coverage (189 tests)
 
 - `src/assembler.rs` — 23 tests (all instruction types, labels, integration)
 - `src/cpu/state.rs` — 22 tests (memory regions, I/O, UART, push/pop, EBR)
-- `src/cpu/executor.rs` — 99 tests (all instruction execution paths, branches, comparisons, stack ops, load/store, shifts, sieve)
+- `src/cpu/executor.rs` — 104 tests (all instruction execution paths, branches, comparisons, stack ops, load/store, shifts, sieve, interrupts)
 - `src/cpu/decode_rom.rs` — 5 tests (valid count, add, branch, push/pop, invalid)
 - `src/cpu/encode.rs` — 5 tests (add, push/pop, mov, branch, lc)
 - `src/emulator.rs` — 9 tests (breakpoints, run/step, I/O, sieve)
 - `src/loader.rs` — 8 tests (LGO parsing and loading)
-- `tests/integration_tests.rs` — 16 tests (full programs: LED, UART, sieve, Fibonacci, Multiply, halt detection, memory access, OOM, stack overflow)
+- `tests/integration_tests.rs` — 17 tests (full programs: LED, UART, sieve, Fibonacci, Multiply, halt detection, memory access, OOM, stack overflow, interrupt)
 
 ### No CI Pipeline
 

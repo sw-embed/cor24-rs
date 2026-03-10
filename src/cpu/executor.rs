@@ -41,6 +41,18 @@ impl Executor {
             return ExecuteResult::Halted;
         }
 
+        // Check for pending interrupt at instruction boundary
+        // Hardware: automatic jal r7,(r6) when uart_rxrdy && ienab && !intis
+        if cpu.interrupt_pending() {
+            cpu.intis = true;
+            let target = cpu.get_reg(6); // r6 = interrupt vector
+            cpu.set_reg(7, cpu.pc); // r7 = return address (current PC)
+            cpu.pc = target;
+            cpu.cycles += 1;
+            cpu.instructions += 1;
+            return ExecuteResult::Ok;
+        }
+
         // Fetch instruction byte
         let inst_byte = cpu.read_byte(cpu.pc);
 
@@ -197,6 +209,10 @@ impl Executor {
             Opcode::Jmp => {
                 // jmp (ra)
                 let target = cpu.get_reg(inst.ra);
+                // jmp (r7) clears interrupt-in-service flag (hardware: &racode)
+                if inst.ra == 7 {
+                    cpu.intis = false;
+                }
                 cpu.pc = target;
             }
 
@@ -216,7 +232,7 @@ impl Executor {
                 let base = cpu.get_reg(inst.rb);
                 let offset = CpuState::sign_extend_8(imm8);
                 let addr = CpuState::mask_24(base.wrapping_add(offset));
-                let value = cpu.read_byte(addr);
+                let value = cpu.read_byte_exec(addr);
                 cpu.set_reg(inst.ra, CpuState::sign_extend_8(value));
                 cpu.pc = next_pc;
             }
@@ -226,7 +242,7 @@ impl Executor {
                 let base = cpu.get_reg(inst.rb);
                 let offset = CpuState::sign_extend_8(imm8);
                 let addr = CpuState::mask_24(base.wrapping_add(offset));
-                let value = cpu.read_byte(addr);
+                let value = cpu.read_byte_exec(addr);
                 cpu.set_reg(inst.ra, value as u32);
                 cpu.pc = next_pc;
             }
@@ -2075,5 +2091,88 @@ mod tests {
             "1000 iterations\n1899 primes.\n",
             "Sieve should output correct prime count"
         );
+    }
+
+    // ========== Interrupt Tests ==========
+
+    #[test]
+    fn test_interrupt_fires_on_uart_rx_with_enable() {
+        let mut cpu = CpuState::new();
+        let executor = Executor::new();
+
+        // Set r6 (iv) to ISR address 0x100
+        cpu.set_reg(6, 0x100);
+        // Put an add r0,r0 at address 0 (normal instruction)
+        let add_byte = find_instruction_byte(0x00, 0, 0).unwrap(); // AddReg r0,r0
+        cpu.write_byte(0, add_byte);
+        // Enable UART interrupt
+        cpu.io.int_enable = 0x01;
+        // Send UART byte (sets uart_rx_ready)
+        cpu.uart_send_rx(b'A');
+
+        // Step should trigger interrupt instead of normal instruction
+        let result = executor.step(&mut cpu);
+        assert_eq!(result, ExecuteResult::Ok);
+        assert_eq!(cpu.pc, 0x100, "Should jump to ISR at r6");
+        assert_eq!(cpu.get_reg(7), 0x000, "r7 should hold return address");
+        assert!(cpu.intis, "Should be in interrupt service");
+    }
+
+    #[test]
+    fn test_jmp_r7_clears_intis() {
+        let mut cpu = CpuState::new();
+        let executor = Executor::new();
+        cpu.intis = true;
+        cpu.set_reg(7, 0x50); // return address
+        // jmp (r7) = 0x68
+        let jmp_r7 = find_instruction_byte(0x0A, 7, 7).unwrap();
+        cpu.write_byte(0, jmp_r7);
+
+        executor.step(&mut cpu);
+        assert!(!cpu.intis, "jmp (r7) should clear intis");
+        assert_eq!(cpu.pc, 0x50, "Should jump to address in r7");
+    }
+
+    #[test]
+    fn test_no_nested_interrupt() {
+        let mut cpu = CpuState::new();
+        let executor = Executor::new();
+        cpu.intis = true; // already servicing
+        cpu.io.int_enable = 0x01;
+        cpu.uart_send_rx(b'X');
+        // Use add r0,r1 (not r0,r0 which is 0x00 = halt sentinel at addr 0)
+        let add_byte = find_instruction_byte(0x00, 0, 1).unwrap();
+        cpu.write_byte(0, add_byte);
+
+        executor.step(&mut cpu);
+        assert_eq!(cpu.pc, 1, "Should execute normal instruction, not interrupt");
+    }
+
+    #[test]
+    fn test_no_interrupt_without_enable() {
+        let mut cpu = CpuState::new();
+        let executor = Executor::new();
+        cpu.io.int_enable = 0x00; // disabled
+        cpu.uart_send_rx(b'X');
+        let add_byte = find_instruction_byte(0x00, 0, 1).unwrap();
+        cpu.write_byte(0, add_byte);
+
+        executor.step(&mut cpu);
+        assert_eq!(cpu.pc, 1, "Should execute normal instruction without interrupt");
+        assert!(!cpu.intis);
+    }
+
+    #[test]
+    fn test_no_interrupt_without_rx_data() {
+        let mut cpu = CpuState::new();
+        let executor = Executor::new();
+        cpu.io.int_enable = 0x01; // enabled but no RX data
+        cpu.set_reg(6, 0x100);
+        let add_byte = find_instruction_byte(0x00, 0, 1).unwrap();
+        cpu.write_byte(0, add_byte);
+
+        executor.step(&mut cpu);
+        assert_eq!(cpu.pc, 1, "Should execute normal instruction without RX data");
+        assert!(!cpu.intis);
     }
 }

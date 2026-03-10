@@ -43,6 +43,7 @@ pub struct CpuSnapshot {
     pub pc: u32,
     pub c: bool,
     pub halted: bool,
+    pub intis: bool,
     pub cycles: u64,
     pub instructions: u64,
     pub led: u8,
@@ -240,6 +241,10 @@ impl EmulatorCore {
         self.cpu.halted
     }
 
+    pub fn is_interrupt_in_service(&self) -> bool {
+        self.cpu.intis
+    }
+
     pub fn is_running(&self) -> bool {
         !self.paused && !self.cpu.halted
     }
@@ -298,6 +303,7 @@ impl EmulatorCore {
             pc: self.cpu.pc,
             c: self.cpu.c,
             halted: self.cpu.halted,
+            intis: self.cpu.intis,
             cycles: self.cpu.cycles,
             instructions: self.cpu.instructions,
             led: self.cpu.io.leds,

@@ -264,3 +264,37 @@ fn test_stack_overflow_example() {
     // Depth 0 is pushed, so word value is 0 — check second push pair (depth=1 at offset -12)
     assert_ne!(cpu.read_word(0xFEEBF1), 0, "Stack should have recursion data");
 }
+
+/// Interrupt example: send UART bytes, verify ISR prints counter digits
+#[test]
+fn test_interrupt_example() {
+    let source = include_str!("../docs/examples/interrupt.s");
+    let mut assembler = Assembler::new();
+    let result = assembler.assemble(source);
+    assert!(result.errors.is_empty(), "Interrupt assembly errors: {:?}", result.errors);
+
+    let mut cpu = CpuState::new();
+    for (addr, byte) in result.bytes.iter().enumerate() {
+        cpu.memory[addr] = *byte;
+    }
+    cpu.pc = 0;
+    let executor = Executor::new();
+
+    // Run some cycles to let main loop start counting
+    executor.run(&mut cpu, 1000);
+    assert!(!cpu.halted, "Main loop should keep running");
+
+    // Send a UART byte to trigger interrupt
+    cpu.uart_send_rx(b'x');
+    executor.run(&mut cpu, 1000);
+
+    // ISR should have printed a digit (0-9) to UART
+    assert!(!cpu.io.uart_output.is_empty(), "ISR should have output a digit");
+    let first_char = cpu.io.uart_output.chars().next().unwrap();
+    assert!(first_char.is_ascii_digit(), "Output should be ASCII digit, got '{}'", first_char);
+
+    // Send another byte, should get another digit
+    cpu.uart_send_rx(b'y');
+    executor.run(&mut cpu, 1000);
+    assert_eq!(cpu.io.uart_output.len(), 2, "Should have two digits after two interrupts");
+}

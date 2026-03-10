@@ -200,7 +200,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                 }
                 <button class="reset-btn" onclick={on_reset_click}
                     disabled={!props.is_loaded || props.is_running}
-                    data-tooltip="Reset CPU to initial state">
+                    data-tooltip="Reset CPU to initial state, clear memory, load program">
                     {"Reset"}
                 </button>
             </div>

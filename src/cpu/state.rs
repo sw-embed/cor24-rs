@@ -102,6 +102,8 @@ pub struct CpuState {
     pub ebr: Vec<u8>,
     /// Halted flag
     pub halted: bool,
+    /// Interrupt-in-service flag (prevents nested interrupts)
+    pub intis: bool,
     /// Cycle count
     pub cycles: u64,
     /// Instruction count
@@ -126,6 +128,7 @@ impl CpuState {
             memory: vec![0; SRAM_SIZE],
             ebr: vec![0; EBR_SIZE],
             halted: false,
+            intis: false,
             cycles: 0,
             instructions: 0,
             io: IoState::new(),
@@ -142,6 +145,7 @@ impl CpuState {
         self.registers[4] = INITIAL_SP;
         self.c = false;
         self.halted = false;
+        self.intis = false;
         self.cycles = 0;
         self.instructions = 0;
         self.io = IoState::new();
@@ -311,6 +315,12 @@ impl CpuState {
         } else {
             value as u32
         }
+    }
+
+    /// Check if an interrupt should fire
+    /// Hardware: ireq = uart_rxrdy && ienab; irqis = ireq && !intis
+    pub fn interrupt_pending(&self) -> bool {
+        self.io.uart_rx_ready && (self.io.int_enable & 0x01 != 0) && !self.intis
     }
 
     /// Mask to 24 bits
