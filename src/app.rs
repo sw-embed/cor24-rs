@@ -1425,9 +1425,9 @@ fn capture_cpu_state_initial(cpu: &WasmCpu) -> EmulatorState {
 
 fn get_rust_examples() -> Vec<RustExample> {
     vec![
-        // Demo 1: Blinky
+        // Demo 1: Blink LED
         RustExample {
-            name: "Blinky".to_string(),
+            name: "Blink LED".to_string(),
             description: "Toggle LED with delay loop".to_string(),
             rust_source: r#"#[no_mangle]
 pub unsafe fn demo_blinky() -> ! {
@@ -1733,7 +1733,7 @@ delay:
         // Demo 5: Button Echo
         RustExample {
             name: "Button Echo".to_string(),
-            description: "LED D2 follows button S2 — click S2 while running".to_string(),
+            description: "LED D2 follows button S2".to_string(),
             rust_source: r#"#[no_mangle]
 pub unsafe fn demo_button_echo() -> ! {
     loop {
@@ -1894,7 +1894,7 @@ mmio_write:
         // Demo 7: Nested Calls
         RustExample {
             name: "Nested Calls".to_string(),
-            description: "4-level call chain showing stack frames at halt".to_string(),
+            description: "Function call chain showing stack frames".to_string(),
             rust_source: r#"#[inline(never)]
 pub unsafe fn level_c(x: u16, y: u16) -> u16 {
     mmio_write(LED_ADDR, x);
@@ -2023,7 +2023,7 @@ uart_putc:
         // Demo 8: Stack Variables
         RustExample {
             name: "Stack Variables".to_string(),
-            description: "Register spilling — 5 callee-saved regs on stack".to_string(),
+            description: "Local variables and register spilling".to_string(),
             rust_source: r#"#[inline(never)]
 pub unsafe fn accumulate(seed: u16) -> u16 {
     let a = seed + 1;
