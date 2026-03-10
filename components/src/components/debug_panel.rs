@@ -75,10 +75,22 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
         ("READY", "emu-state emu-ready")
     };
 
-    // LED and switch
-    let led_on = (state.led_value & 1) == 1;
-    let led_class = if led_on { "led led-on led-large" } else { "led led-off led-large" };
-    let led_status = if led_on { "ON" } else { "OFF" };
+    // LED and switch — use duty cycle for dimming during Run
+    let duty = state.led_duty_cycle;
+    let led_class = if duty > 0.0 { "led led-on led-large" } else { "led led-off led-large" };
+    let led_status = if duty > 0.01 && duty < 0.99 {
+        format!("{:.0}%", duty * 100.0)
+    } else if duty >= 0.99 {
+        "ON".to_string()
+    } else {
+        "OFF".to_string()
+    };
+    // Dim LED opacity proportionally (0.3 min so it's still visible)
+    let led_style = if duty > 0.0 && duty < 1.0 {
+        format!("opacity: {:.2};", 0.3 + duty * 0.7)
+    } else {
+        String::new()
+    };
     let switch_on = (props.switch_value & 1) == 1;
     let switch_class = if switch_on { "switch switch-on switch-large" } else { "switch switch-off switch-large" };
     let switch_status = if switch_on { "PRESSED" } else { "RELEASED" };
@@ -253,7 +265,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                             <span class="io-inline-status">{switch_status}</span>
                         </div>
                         <div class="peripheral-section-inline">
-                            <div class={led_class}>{"D2"}</div>
+                            <div class={led_class} style={led_style}>{"D2"}</div>
                             <span class="io-inline-status">{led_status}</span>
                         </div>
                     </div>

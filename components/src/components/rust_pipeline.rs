@@ -26,6 +26,7 @@ pub struct EmulatorState {
     pub condition_flag: bool,
     pub is_halted: bool,
     pub led_value: u8,
+    pub led_duty_cycle: f32,  // 0.0 (always off) to 1.0 (always on) over last batch
     pub instruction_count: u32,
     pub memory_low: Vec<u8>,
     pub memory_io_led: Vec<u8>,         // I/O: LED/Switch at 0xFF0000 (32 bytes)

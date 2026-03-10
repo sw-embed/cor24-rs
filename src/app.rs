@@ -254,6 +254,8 @@ pub fn app() -> Html {
                 // Execute a batch of instructions per animation frame
                 let mut halted = false;
                 let mut error_msg = None;
+                let mut led_on_count: u32 = 0;
+                let mut led_total: u32 = 0;
                 for _ in 0..500 {
                     if current_cpu.is_halted() {
                         halted = true;
@@ -264,11 +266,19 @@ pub fn app() -> Html {
                         halted = true;
                         break;
                     }
+                    led_total += 1;
+                    if current_cpu.get_led_value() & 1 == 1 {
+                        led_on_count += 1;
+                    }
                 }
 
                 // Update CPU state for UI refresh (includes LED state)
                 current_cpu.set_switches(switch_handle.get());
-                state_handle.set(capture_cpu_state(&current_cpu, &state_handle));
+                let mut state = capture_cpu_state(&current_cpu, &state_handle);
+                if led_total > 0 {
+                    state.led_duty_cycle = led_on_count as f32 / led_total as f32;
+                }
+                state_handle.set(state);
                 cpu_handle.set(current_cpu.clone());
 
                 if halted {
@@ -391,6 +401,7 @@ pub fn app() -> Html {
                     condition_flag: new_cpu.get_condition_flag(),
                     is_halted: new_cpu.is_halted(),
                     led_value: new_cpu.get_led_value(),
+                    led_duty_cycle: if (new_cpu.get_led_value() & 1) == 1 { 1.0 } else { 0.0 },
                     instruction_count: new_cpu.get_instruction_count(),
                     memory_low: memory_low.clone(),
                     memory_io_led: memory_io_led.clone(),
@@ -472,6 +483,7 @@ pub fn app() -> Html {
                     condition_flag: new_cpu.get_condition_flag(),
                     is_halted: new_cpu.is_halted(),
                     led_value: new_cpu.get_led_value(),
+                    led_duty_cycle: if (new_cpu.get_led_value() & 1) == 1 { 1.0 } else { 0.0 },
                     instruction_count: new_cpu.get_instruction_count(),
                     memory_low,
                     memory_io_led,
@@ -563,6 +575,8 @@ pub fn app() -> Html {
 
                     // Execute a batch of instructions
                     let mut halted = false;
+                    let mut led_on_count: u32 = 0;
+                    let mut led_total: u32 = 0;
                     for _ in 0..10 {
                         if current_cpu.is_halted() || current_cpu.should_stop_for_led() {
                             halted = true;
@@ -571,6 +585,10 @@ pub fn app() -> Html {
                         if current_cpu.step().is_err() {
                             halted = true;
                             break;
+                        }
+                        led_total += 1;
+                        if current_cpu.get_led_value() & 1 == 1 {
+                            led_on_count += 1;
                         }
                     }
 
@@ -622,6 +640,9 @@ pub fn app() -> Html {
                         condition_flag: current_cpu.get_condition_flag(),
                         is_halted: current_cpu.is_halted(),
                         led_value: current_cpu.get_led_value(),
+                        led_duty_cycle: if led_total > 0 {
+                            led_on_count as f32 / led_total as f32
+                        } else if (current_cpu.get_led_value() & 1) == 1 { 1.0 } else { 0.0 },
                         instruction_count: current_cpu.get_instruction_count(),
                         memory_low,
                         memory_io_led,
@@ -733,6 +754,7 @@ pub fn app() -> Html {
                         condition_flag: new_cpu.get_condition_flag(),
                         is_halted: new_cpu.is_halted(),
                         led_value: new_cpu.get_led_value(),
+                    led_duty_cycle: if (new_cpu.get_led_value() & 1) == 1 { 1.0 } else { 0.0 },
                         instruction_count: new_cpu.get_instruction_count(),
                         memory_low: memory_low.clone(),
                         memory_io_led: memory_io_led.clone(),
@@ -1391,6 +1413,7 @@ fn capture_cpu_state(cpu: &WasmCpu, prev: &EmulatorState) -> EmulatorState {
         condition_flag: cpu.get_condition_flag(),
         is_halted: cpu.is_halted(),
         led_value: cpu.get_led_value(),
+        led_duty_cycle: if (cpu.get_led_value() & 1) == 1 { 1.0 } else { 0.0 },
         instruction_count: cpu.get_instruction_count(),
         memory_low: memory_low.clone(),
         memory_io_led: memory_io_led.clone(),
