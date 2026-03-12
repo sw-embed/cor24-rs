@@ -1617,7 +1617,10 @@ pub fn demo_add() -> u16 {
             msp430_asm: r#"demo_add:
 	mov	#342, r12         ; compiler constant-folded!
 	ret"#.to_string(),
-            cor24_assembly: r#"; --- demo_add: returns 342 (0x156) in r0 ---
+            cor24_assembly: r#"; Reset vector -> entry point
+    bra     demo_add
+
+; --- demo_add: returns 342 (0x156) in r0 ---
 ; The compiler constant-folds 100+200+42 at compile time.
 demo_add:
     la      r0, 0x000156
@@ -1689,7 +1692,10 @@ delay:
 .LBB2_3:
 	add	#2, r1
 	ret"#.to_string(),
-            cor24_assembly: r#"; --- demo_blinky: toggle LED on/off with delay ---
+            cor24_assembly: r#"; Reset vector -> entry point
+    bra     demo_blinky
+
+; --- demo_blinky: toggle LED on/off with delay ---
 demo_blinky:
 .LBB4_1:
     la      r0, 0xFF0000
@@ -1793,7 +1799,10 @@ mmio_read:
 mmio_write:
 	mov	r13, 0(r12)
 	ret"#.to_string(),
-            cor24_assembly: r#"; --- demo_button_echo: LED ON when S2 pressed ---
+            cor24_assembly: r#"; Reset vector -> entry point
+    bra     demo_button_echo
+
+; --- demo_button_echo: LED ON when S2 pressed ---
 demo_button_echo:
 .LBB5_1:
     la      r0, 0xFF0000
@@ -1878,7 +1887,10 @@ pub unsafe fn demo_countdown() {
 	call	#mmio_write
 .LBB6_3:
 	jmp	.LBB6_3"#.to_string(),
-            cor24_assembly: r#"; --- demo_countdown: count 10 down to 0 on LED ---
+            cor24_assembly: r#"; Reset vector -> entry point
+    bra     demo_countdown
+
+; --- demo_countdown: count 10 down to 0 on LED ---
 demo_countdown:
     lw      r0, 18(fp)
     push    r0
@@ -2004,7 +2016,10 @@ pub unsafe fn demo_fibonacci() {
 	call	#uart_putc
 .Lhalt:
 	jmp	.Lhalt"#.to_string(),
-            cor24_assembly: r#"; --- demo_fibonacci: print series to UART ---
+            cor24_assembly: r#"; Reset vector -> entry point
+    bra     demo_fib
+
+; --- demo_fibonacci: print series to UART ---
 ; UART TX: "1 1 2 3 5 8 13 21 34 55\n"
 
 demo_fib:
@@ -2148,7 +2163,10 @@ pub unsafe fn demo_memory() {
 	mov	&0x0204, r13      ; load from block 2
 .LBB_1:
 	jmp	.LBB_1"#.to_string(),
-            cor24_assembly: r#"; --- demo_memory: store to non-adjacent memory blocks ---
+            cor24_assembly: r#"; Reset vector -> entry point
+    bra     demo_memory
+
+; --- demo_memory: store to non-adjacent memory blocks ---
 ; Writes to 0x0100 and 0x0200 (256 bytes apart)
 demo_memory:
     lc      r0, 42            ; first value
@@ -2241,7 +2259,10 @@ pub unsafe fn demo_multiply() {
 	call	#uart_putc
 .Lhalt:
 	jmp	.Lhalt"#.to_string(),
-            cor24_assembly: r#"; --- demo_multiply: 6 × 7 = 42 via repeated addition ---
+            cor24_assembly: r#"; Reset vector -> entry point
+    bra     demo_multiply
+
+; --- demo_multiply: 6 × 7 = 42 via repeated addition ---
 ; Prints "42\n" to UART
 
 demo_multiply:
@@ -2369,7 +2390,10 @@ level_c:
 	call	#mmio_write
 .LBB14_1:
 	jmp	.LBB14_1"#.to_string(),
-            cor24_assembly: r#"; --- demo_nested: 3-level call chain ---
+            cor24_assembly: r#"; Reset vector -> entry point
+    bra     demo_nested
+
+; --- demo_nested: 3-level call chain ---
 ; demo → level_a → level_b → level_c
 ; arg in r0, return addr pushed on stack
 ; Result: LED = 173
@@ -2468,7 +2492,10 @@ accumulate:
 	pop	r9
 	pop	r10
 	ret"#.to_string(),
-            cor24_assembly: r#"; --- demo_stack_vars: register spilling via push/pop ---
+            cor24_assembly: r#"; Reset vector -> entry point
+    bra     demo_stack_vars
+
+; --- demo_stack_vars: register spilling via push/pop ---
 ; seed=32: a=33, b=65, c=98, result=a^b^c=2
 ; Only 3 GPRs (r0,r1,r2) — must spill to stack
 
@@ -2570,7 +2597,10 @@ uart_putc:
 	mov	#-255, r12        ; UART_DATA
 	call	#mmio_write
 	ret"#.to_string(),
-            cor24_assembly: r#"; --- demo_uart_hello: send "Hello\n" via UART ---
+            cor24_assembly: r#"; Reset vector -> entry point
+    bra     demo_uart_hello
+
+; --- demo_uart_hello: send "Hello\n" via UART ---
 ; Polls TX busy (bit 7 of status) before each byte
 demo_uart_hello:
     lc      r0, 72            ; 'H'

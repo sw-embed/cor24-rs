@@ -38,7 +38,7 @@ This is a browser-based COR24 CPU emulator written in Rust, compiled to WebAssem
 
 - **`src/`** — Main application crate (`cor24-emulator`)
 - **`components/`** — Reusable Yew UI components library
-- **`rust-to-cor24/`** — Standalone CLI tool (not part of workspace) that compiles Rust via MSP430 target and translates MSP430 ASM to COR24 assembly. Not compiled to WASM — used offline to generate pipeline examples.
+- **`rust-to-cor24/`** — Standalone CLI tool (not part of workspace). Pipeline: Rust → `rustc --target msp430-none-elf --emit asm` → MSP430 ASM → `msp430-to-cor24 --entry <func>` → COR24 ASM (with `bra <entry>` reset vector prologue at address 0). See `rust-to-cor24/README.md` for full pipeline documentation. Not compiled to WASM — used offline to generate pipeline examples shown in the Web UI's Rust tab.
 
 ### Core Modules (src/)
 
