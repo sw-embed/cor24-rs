@@ -38,7 +38,14 @@ Prerequisites: Rust 1.75+, Trunk (`cargo install trunk`), `rustup target add was
 
 ## Deployment
 
-The `pages/` directory contains pre-built production assets and is committed to git. GitHub Actions deploys from `pages/` on push to `main` — no CI build step, just upload. After `./build.sh`, commit the updated `pages/` directory to deploy.
+The `pages/` directory contains pre-built production assets and is committed to git. GitHub Actions deploys from `pages/` on push to `main` — no CI build step, just upload.
+
+**To deploy changes to the live site:**
+1. `./build.sh --clean` — always use `--clean` to avoid stale cached WASM artifacts
+2. `git add pages/` and commit (separate from code changes)
+3. `git push`
+
+**IMPORTANT:** Use `./build.sh --clean`, not `./build.sh`. Incremental builds can serve stale code if `include_str!()` data files changed but Rust source didn't.
 
 ## Architecture
 
