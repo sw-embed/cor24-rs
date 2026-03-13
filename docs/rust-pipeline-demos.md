@@ -74,7 +74,7 @@ cd rust-to-cor24 && cargo build --release    # builds msp430-to-cor24 and cor24-
 
 | Demo | Description |
 |------|-------------|
-| **demo_add** | Computes `100 + 200 + 42 = 342`, stores result to memory. Basic arithmetic through the full pipeline. |
+| **demo_add** | Computes `100 + 200 + 42 = 342`, stores result to memory. Note: `rustc` constant-folds the addition at compile time — the generated code just loads 342 directly. |
 | **demo_stack_vars** | Accumulates values across many variables, forcing register spills to fp-relative stack slots. Demonstrates the translator's spill mechanism. |
 
 ### Control Flow
@@ -100,6 +100,12 @@ cd rust-to-cor24 && cargo build --release    # builds msp430-to-cor24 and cor24-
 |------|-------------|
 | **demo_blinky** | Toggles LED D2 on/off in a loop with delay pauses. |
 | **demo_button_echo** | Reads button S2 state and echoes it to LED D2 in a tight loop. |
+
+### Ownership & RAII
+
+| Demo | Description |
+|------|-------------|
+| **demo_drop** | Demonstrates `Drop` trait on a stack-allocated `Guard` struct. The compiler inserts the destructor call at scope exit — no allocator needed. Memory at 0x0100 goes 1 (alive) → 0 (dropped) → 0xFF (done). |
 
 ### Error Handling
 

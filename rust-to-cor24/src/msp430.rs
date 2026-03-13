@@ -648,9 +648,10 @@ fn translate_mov(ops: &[MspOperand], byte_mode: bool) -> Result<Vec<String>> {
         }
         // mov #imm, offset(Rdst) -> store immediate to memory
         (MspOperand::Immediate(imm), MspOperand::Indexed(off, dst)) => {
-            let d = map_register(*dst)?;
-            let tmp = temp_reg(&d);
-            load_immediate(&mut result, &tmp, *imm);
+            // Use map_base_register to handle sp (COR24 can't use sp as base)
+            let tmp = "r0";
+            load_immediate(&mut result, tmp, *imm);
+            let d = map_base_register(*dst, &mut result, tmp)?;
             let store_op = if byte_mode { "sb" } else { "sw" };
             result.push(format!("{}      {}, {}({})", store_op, tmp, off, d));
         }

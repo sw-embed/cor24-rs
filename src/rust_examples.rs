@@ -43,6 +43,13 @@ pub fn get_rust_examples() -> Vec<RustExample> {
             include_str!("examples/rust_pipeline/demo_countdown.cor24.s"),
         ),
         example(
+            "Drop (RAII)",
+            "Automatic destructor on scope exit — no allocator needed",
+            include_str!("examples/rust_pipeline/demo_drop.rs"),
+            include_str!("examples/rust_pipeline/demo_drop.msp430.s"),
+            include_str!("examples/rust_pipeline/demo_drop.cor24.s"),
+        ),
+        example(
             "Echo (Interrupts)",
             "UART echo with Rust logic + asm!() interrupt plumbing",
             include_str!("examples/rust_pipeline/demo_echo.rs"),

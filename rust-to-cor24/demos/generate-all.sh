@@ -25,7 +25,7 @@ echo "Building msp430-to-cor24 and cor24-run..."
 TRANSLATE="$TRANSLATOR_DIR/target/release/msp430-to-cor24"
 RUN="$TRANSLATOR_DIR/target/release/cor24-run"
 
-DEMOS=(demo_blinky demo_add demo_uart_hello demo_countdown demo_button_echo demo_echo demo_echo_v2 demo_fibonacci demo_fibonacci_iter demo_nested demo_stack_vars demo_panic)
+DEMOS=(demo_blinky demo_add demo_uart_hello demo_countdown demo_button_echo demo_drop demo_echo demo_echo_v2 demo_fibonacci demo_fibonacci_iter demo_nested demo_stack_vars demo_panic)
 PASSED=0
 FAILED=0
 
