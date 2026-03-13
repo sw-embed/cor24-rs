@@ -70,14 +70,15 @@ mmio_write:
 
 ; --- function: start ---
 start:
-    la      r0, 0xFF0000
-    la      r1, 0x000156
-    ; call mmio_write
+    ; call demo_add
     la      r2, .Lret_6
     push    r2
-    la      r2, mmio_write
+    la      r2, demo_add
     jmp     (r2)
     .Lret_6:
+    ; store result to memory at 0x0100
+    la      r1, 0x000100
+    sw      r0, 0(r1)
 .LBB3_1:
     bra     .LBB3_1
 .Lfunc_end3:

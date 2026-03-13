@@ -1,11 +1,12 @@
 //! Demo: Add Two Numbers
-//! Computes 100 + 200 + 42 = 342 and stores result in r0.
+//! Computes 100 + 200 + 42 = 342 and stores result at address 0x0100.
 //! Pipeline: this file → rustc (msp430) → .msp430.s → msp430-to-cor24 → .cor24.s → assembler → emulator
 
 #![no_std]
 
-const LED_ADDR: u16 = 0xFF00;
 const UART_DATA: u16 = 0xFF01;
+/// Result stored here — visible in memory viewer at halt
+const RESULT_ADDR: u16 = 0x0100;
 
 #[inline(never)]
 #[no_mangle]
@@ -28,12 +29,12 @@ pub fn demo_add() -> u16 {
     a + b + c
 }
 
-/// Entry point — writes result to LED register so compiler can't optimize it away
+/// Entry point — compute sum, store to memory, halt
 #[inline(never)]
 #[no_mangle]
 pub unsafe fn start() -> ! {
     let result = demo_add();
-    mmio_write(LED_ADDR, result);
+    core::ptr::write_volatile(RESULT_ADDR as *mut u16, result);
     loop {}
 }
 

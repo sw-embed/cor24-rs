@@ -1,16 +1,28 @@
-# CLI Demos — Rust-to-COR24 Pipeline
+# Rust → COR24 Pipeline Demos
 
-The `rust-to-cor24/demos/` directory contains 12 self-contained Rust programs
-that compile through the full pipeline:
+Rust programs compiled through the full cross-compilation pipeline:
 
 ```
 Rust (.rs) → rustc --target msp430-none-elf → MSP430 ASM → msp430-to-cor24 → COR24 ASM → assembler → emulator
 ```
 
-Each demo is a standalone Rust crate targeting `#![no_std]` with a
-`#[no_mangle] pub unsafe fn start()` entry point.
+These demonstrate the Rust-to-COR24 translator. Each demo is a standalone
+`#![no_std]` Rust crate with a `#[no_mangle] pub unsafe fn start()` entry point.
 
-## Running Demos
+The demos are available in the **Rust tab** of the
+[web emulator](https://sw-embed.github.io/cor24-rs/) (click "Rust" in the
+header, then pick an example from the dropdown) and can also be run from
+the command line.
+
+## Web UI
+
+1. Open the [web emulator](https://sw-embed.github.io/cor24-rs/)
+2. Click the **Rust** tab in the header
+3. Select an example from the dropdown (default: Blink LED)
+4. Click **Compile** → **Translate** → **Assemble** to step through the pipeline
+5. Click **Run** to execute in the emulator
+
+## CLI
 
 ### Single demo
 
@@ -24,7 +36,7 @@ cd rust-to-cor24/demos
 ./run-demo.sh demo_add --skip-compile
 
 # With UART input (for echo demos)
-./run-demo.sh demo_echo_v2 --uart-input 'hello\x21'
+./run-demo.sh demo_echo_v2 --uart-input 'hello!'
 
 # List available demos
 ./run-demo.sh --help
@@ -39,7 +51,7 @@ cd rust-to-cor24/demos/demo_add
 ```
 
 Echo demos (`demo_echo`, `demo_echo_v2`) default to `--uart-input 'abc3\x21'`
-if no input is specified.
+(`\x21` = `!` which halts the program) if no input is specified.
 
 ### All demos
 
@@ -62,7 +74,7 @@ cd rust-to-cor24 && cargo build --release    # builds msp430-to-cor24 and cor24-
 
 | Demo | Description |
 |------|-------------|
-| **demo_add** | Computes `100 + 200 + 42 = 342`. Basic arithmetic through the full pipeline. |
+| **demo_add** | Computes `100 + 200 + 42 = 342`, stores result to memory. Basic arithmetic through the full pipeline. |
 | **demo_stack_vars** | Accumulates values across many variables, forcing register spills to fp-relative stack slots. Demonstrates the translator's spill mechanism. |
 
 ### Control Flow
@@ -118,7 +130,13 @@ All demos use byte-width MMIO (`sb`/`lb`) matching the hardware Verilog:
 | `0xFF0101` | `IO_UARTSTATUS` | UART status (bit 0: RX ready) |
 | `0xFF0110` | `IO_UARTINTENA` | UART interrupt enable (bit 0: RX interrupt) |
 
+## Source Files
+
+Rust sources are in `rust-to-cor24/demos/demo_*/src/lib.rs`. Pre-built pipeline
+examples for the web UI are in `src/examples/rust_pipeline/`.
+
 ## See Also
 
+- [Assembler Examples](assembler-examples.md) — Hand-written COR24 assembly programs
 - [rust-to-cor24/README.md](../rust-to-cor24/README.md) — Translator architecture and register mapping
 - [Live Web Emulator](https://sw-embed.github.io/cor24-rs/) — Browser-based emulator with Rust pipeline tab

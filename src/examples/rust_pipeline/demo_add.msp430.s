@@ -47,9 +47,8 @@ mmio_write:
 	.p2align	1
 	.type	start,@function
 start:
-	mov	#-256, r12
-	mov	#342, r13
-	call	#mmio_write
+	call	#demo_add
+	mov	r12, &256
 .LBB3_1:
 	jmp	.LBB3_1
 .Lfunc_end3:

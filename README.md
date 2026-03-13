@@ -7,10 +7,10 @@ architecture. Written in Rust and compiled to WebAssembly.
 **[Live Demo](https://sw-embed.github.io/cor24-rs/)**
 
 ### Assembler Tab
-![COR24 Assembler Interface](images/assembler-tab-full-2026-03-10T05-48-01-034Z.png?ts=1773121722)
+![COR24 Assembler Interface](images/assembler-tab-2026-03-13T22-33-50-596Z.png?ts=1773441405)
 
 ### Rust Tab
-![COR24 Rust Pipeline Interface](images/rust-tab-final-2026-03-10T05-51-00-545Z.png?ts=1773121722)
+![COR24 Rust Pipeline Interface](images/rust-tab-2026-03-13T22-36-22-088Z.png?ts=1773441405)
 
 ## Features
 
@@ -55,18 +55,29 @@ forms (1, 2, or 4 bytes).
 | Stack | `push`, `pop` |
 | Move | `mov`, `sxt`, `zxt` |
 
-## CLI Demos (Rust → COR24 Pipeline)
+## Examples & Demos
 
-12 self-contained Rust programs compile through the full
-Rust → MSP430 → COR24 → emulator pipeline. See **[docs/demos.md](docs/demos.md)**
-for the full catalog and usage.
+This project has two sets of examples, matching the two tabs in the web UI:
+
+- **[Assembler Examples](docs/assembler-examples.md)** — 11 hand-written COR24 assembly programs.
+  Available in the web UI's **Assembler** tab (click Examples → pick one → Assemble → Run)
+  and via `cor24-dbg` on the command line (see `scripts/demo-cli-*.sh`).
+
+- **[Rust Pipeline Demos](docs/rust-pipeline-demos.md)** — 12 Rust programs compiled through the
+  Rust → MSP430 → COR24 cross-compilation pipeline.
+  Available in the web UI's **Rust** tab (pick example → Compile → Translate → Assemble → Run)
+  and via CLI scripts in `rust-to-cor24/demos/` (see `run-demo.sh`, per-demo `run.sh`, `generate-all.sh`).
 
 ```bash
-cd rust-to-cor24/demos
-./run-demo.sh demo_add              # full pipeline for one demo
-./run-demo.sh demo_echo_v2 --uart-input 'hello\x21'
-./generate-all.sh                   # build and run all 12 demos
+# Assembler example via CLI debugger
+scripts/demo-cli-hello-world.sh
+
+# Rust pipeline demo via CLI
+rust-to-cor24/demos/run-demo.sh demo_add
+rust-to-cor24/demos/run-demo.sh demo_echo_v2 --uart-input 'hello!'
 ```
+
+For an overview of all the binaries and how they fit together, see **[docs/eli5.md](docs/eli5.md)**.
 
 ## Building
 

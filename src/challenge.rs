@@ -73,7 +73,7 @@ pub fn get_examples() -> Vec<(String, String, String)> {
     vec![
         (
             "Add".into(),
-            "Compute 100 + 200 + 42 = 342, return in r0".into(),
+            "Compute 100 + 200 + 42 = 342, store to memory".into(),
             include_str!("examples/assembler/add.s").into(),
         ),
         (

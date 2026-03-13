@@ -16,7 +16,7 @@ pub fn get_rust_examples() -> Vec<RustExample> {
     vec![
         example(
             "Add Two Numbers",
-            "Compute 100 + 200 + 42 = 342, write to LED",
+            "Compute 100 + 200 + 42 = 342, store to memory",
             include_str!("examples/rust_pipeline/demo_add.rs"),
             include_str!("examples/rust_pipeline/demo_add.msp430.s"),
             include_str!("examples/rust_pipeline/demo_add.cor24.s"),
