@@ -1,10 +1,10 @@
-; Countdown: Display 10 down to 0 on LED
-; Writes count to LED register, delays, decrements
+; Countdown: Store 10 down to 0 to memory at 0x0100
+; Writes count to memory, delays, decrements
 
-        la      r1,0xFF0000 ; LED address
+        la      r1,0x000100 ; Result address
         lc      r0,10       ; Start at 10
 
-loop:   sb      r0,0(r1)    ; Write count to LED
+loop:   sb      r0,0(r1)    ; Write count to memory
 
         ; Delay loop
         push    r0
@@ -20,7 +20,7 @@ wait:   add     r2,1
         ceq     r0,z        ; count == 0?
         brf     loop        ; Continue if not zero
 
-        ; Clear LED and halt
+        ; Clear result and halt
         lc      r0,0
         sb      r0,0(r1)
 halt:   bra     halt

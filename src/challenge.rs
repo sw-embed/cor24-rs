@@ -88,7 +88,7 @@ pub fn get_examples() -> Vec<(String, String, String)> {
         ),
         (
             "Countdown".into(),
-            "Count 10→0 on LED, then halt".into(),
+            "Count 10→0, store to memory".into(),
             include_str!("examples/assembler/countdown.s").into(),
         ),
         (
@@ -118,7 +118,7 @@ pub fn get_examples() -> Vec<(String, String, String)> {
         ),
         (
             "Stack Variables".into(),
-            "Local variables and register spilling".into(),
+            "Local variables and register spilling, result to memory".into(),
             include_str!("examples/assembler/stack_variables.s").into(),
         ),
         (

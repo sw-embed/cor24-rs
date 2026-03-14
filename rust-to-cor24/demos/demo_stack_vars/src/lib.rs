@@ -5,25 +5,26 @@
 
 #![no_std]
 
-const LED_ADDR: u16 = 0xFF00;
+const RESULT_ADDR: u16 = 0x0100;
+const SWITCH_ADDR: u16 = 0xFF00;
 const UART_DATA: u16 = 0xFF01;
 
 #[inline(never)]
 #[no_mangle]
-pub unsafe fn mmio_write(addr: u16, val: u16) {
-    core::ptr::write_volatile(addr as *mut u8, val as u8);
+pub unsafe fn mem_write(addr: u16, val: u8) {
+    core::ptr::write_volatile(addr as *mut u8, val);
 }
 
 #[inline(never)]
 #[no_mangle]
-pub unsafe fn mmio_read(addr: u16) -> u16 {
-    core::ptr::read_volatile(addr as *const u8) as u16
+pub unsafe fn mem_read(addr: u16) -> u8 {
+    core::ptr::read_volatile(addr as *const u8)
 }
 
 #[inline(never)]
 #[no_mangle]
 pub unsafe fn uart_putc(ch: u16) {
-    mmio_write(UART_DATA, ch);
+    mem_write(UART_DATA, ch as u8);
 }
 
 #[inline(never)]
@@ -35,7 +36,7 @@ pub unsafe fn accumulate(seed: u16) -> u16 {
     let d = c + b;
     let e = d + c;
     let result = a ^ b ^ c ^ d ^ e;
-    mmio_write(LED_ADDR, result);
+    mem_write(RESULT_ADDR, result as u8);
     uart_putc(a);
     uart_putc(b);
     uart_putc(c);
@@ -47,7 +48,7 @@ pub unsafe fn accumulate(seed: u16) -> u16 {
 #[inline(never)]
 #[no_mangle]
 pub unsafe fn demo_stack_vars() {
-    let x = mmio_read(LED_ADDR);  // runtime value
+    let x = mem_read(SWITCH_ADDR) as u16;  // runtime value
     accumulate(x + 1);
 }
 

@@ -8,48 +8,6 @@
 
 ; --- function: _RNvCsgMG9zBUy57e_7___rustc17rust_begin_unwind ---
 _RNvCsgMG9zBUy57e_7___rustc17rust_begin_unwind:
-    lc      r0, 80
-    ; call uart_putc
-    la      r2, .Lret_0
-    push    r2
-    la      r2, uart_putc
-    jmp     (r2)
-    .Lret_0:
-    lc      r0, 65
-    ; call uart_putc
-    la      r2, .Lret_1
-    push    r2
-    la      r2, uart_putc
-    jmp     (r2)
-    .Lret_1:
-    lc      r0, 78
-    ; call uart_putc
-    la      r2, .Lret_2
-    push    r2
-    la      r2, uart_putc
-    jmp     (r2)
-    .Lret_2:
-    lc      r0, 73
-    ; call uart_putc
-    la      r2, .Lret_3
-    push    r2
-    la      r2, uart_putc
-    jmp     (r2)
-    .Lret_3:
-    lc      r0, 67
-    ; call uart_putc
-    la      r2, .Lret_4
-    push    r2
-    la      r2, uart_putc
-    jmp     (r2)
-    .Lret_4:
-    lc      r0, 10
-    ; call uart_putc
-    la      r2, .Lret_5
-    push    r2
-    la      r2, uart_putc
-    jmp     (r2)
-    .Lret_5:
 .LBB0_1:
     bra     .LBB0_1
 .Lfunc_end0:
@@ -58,19 +16,19 @@ _RNvCsgMG9zBUy57e_7___rustc17rust_begin_unwind:
 demo_fibonacci:
     lc      r0, 10
     ; call fibonacci
-    la      r2, .Lret_6
+    la      r2, .Lret_0
     push    r2
     la      r2, fibonacci
     jmp     (r2)
-    .Lret_6:
+    .Lret_0:
     mov     r1, r0
-    la      r0, 0xFF0000
-    ; call mmio_write
-    la      r2, .Lret_7
+    la      r0, 0x000100
+    ; call mem_write
+    la      r2, .Lret_1
     push    r2
-    la      r2, mmio_write
+    la      r2, mem_write
     jmp     (r2)
-    .Lret_7:
+    .Lret_1:
 .LBB1_1:
     bra     .LBB1_1
 .Lfunc_end1:
@@ -102,11 +60,11 @@ fibonacci:
     lw      r0, 15(fp)
     add     r0, -1
     ; call fibonacci
-    la      r2, .Lret_8
+    la      r2, .Lret_2
     push    r2
     la      r2, fibonacci
     jmp     (r2)
-    .Lret_8:
+    .Lret_2:
     push    r1
     lw      r1, 18(fp)
     add     r1, r0
@@ -140,8 +98,8 @@ fibonacci:
     jmp     (r2)
 .Lfunc_end2:
 
-; --- function: mmio_write ---
-mmio_write:
+; --- function: mem_write ---
+mem_write:
     sb      r1, 0(r0)
     pop     r2
     jmp     (r2)
@@ -150,19 +108,10 @@ mmio_write:
 ; --- function: start ---
 start:
     ; call demo_fibonacci
-    la      r2, .Lret_9
+    la      r2, .Lret_3
     push    r2
     la      r2, demo_fibonacci
     jmp     (r2)
-    .Lret_9:
+    .Lret_3:
 .Lfunc_end4:
-
-; --- function: uart_putc ---
-uart_putc:
-    mov     r1, r0
-    la      r0, 0xFF0100
-    ; tail call mmio_write
-    la      r2, mmio_write
-    jmp     (r2)
-.Lfunc_end5:
 

@@ -42,13 +42,13 @@ cargo build -p cor24-cli
 |---------|-------------|
 | **Add** | Compute `100 + 200 + 42 = 342`, store result to memory at 0x0100. |
 | **Multiply** | `6 × 7 = 42` via repeated-addition loop, print result to UART. |
-| **Stack Variables** | Local variables via push/pop register spilling. Computes `a=seed+1, b=a+seed, c=b+a, result=a^b^c`. |
+| **Stack Variables** | Local variables via push/pop register spilling. Computes `a=seed+1, b=a+seed, c=b+a, result=a^b^c`, stores result to memory. |
 
 ### Control Flow
 
 | Example | Description |
 |---------|-------------|
-| **Countdown** | Count 10 → 0, writing each value to the LED register with delays. |
+| **Countdown** | Count 10 → 0, storing each value to memory at 0x0100 with delays. |
 | **Fibonacci** | Print `fib(1)..fib(10)` (1 1 2 3 5 8 13 21 34 55) to UART. |
 | **Nested Calls** | 3-level function call chain computing `((5 + 10) * 2) + 3 = 33`. Shows stack frame management with prologue/epilogue. |
 

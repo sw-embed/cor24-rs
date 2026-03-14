@@ -37,7 +37,7 @@ pub fn get_rust_examples() -> Vec<RustExample> {
         ),
         example(
             "Countdown",
-            "Count 10→0 on LED, then halt",
+            "Count 10→0, store each value to memory",
             include_str!("examples/rust_pipeline/demo_countdown.rs"),
             include_str!("examples/rust_pipeline/demo_countdown.msp430.s"),
             include_str!("examples/rust_pipeline/demo_countdown.cor24.s"),
@@ -58,21 +58,21 @@ pub fn get_rust_examples() -> Vec<RustExample> {
         ),
         example(
             "Fibonacci (iterative)",
-            "Compute fib(10) = 89 using iteration",
+            "Compute fib(10) = 89 iteratively, store to memory",
             include_str!("examples/rust_pipeline/demo_fibonacci_iter.rs"),
             include_str!("examples/rust_pipeline/demo_fibonacci_iter.msp430.s"),
             include_str!("examples/rust_pipeline/demo_fibonacci_iter.cor24.s"),
         ),
         example(
             "Fibonacci (recursive)",
-            "Compute fib(10) = 89 using recursive calls",
+            "Compute fib(10) = 89 recursively, store to memory",
             include_str!("examples/rust_pipeline/demo_fibonacci.rs"),
             include_str!("examples/rust_pipeline/demo_fibonacci.msp430.s"),
             include_str!("examples/rust_pipeline/demo_fibonacci.cor24.s"),
         ),
         example(
             "Nested Calls",
-            "3-level call chain: main→level_a→level_b",
+            "3-level call chain, result stored to memory",
             include_str!("examples/rust_pipeline/demo_nested.rs"),
             include_str!("examples/rust_pipeline/demo_nested.msp430.s"),
             include_str!("examples/rust_pipeline/demo_nested.cor24.s"),
@@ -86,7 +86,7 @@ pub fn get_rust_examples() -> Vec<RustExample> {
         ),
         example(
             "Stack Variables",
-            "Accumulate values across many variables",
+            "Accumulate values across many variables, result to memory",
             include_str!("examples/rust_pipeline/demo_stack_vars.rs"),
             include_str!("examples/rust_pipeline/demo_stack_vars.msp430.s"),
             include_str!("examples/rust_pipeline/demo_stack_vars.cor24.s"),

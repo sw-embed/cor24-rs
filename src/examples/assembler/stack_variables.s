@@ -10,8 +10,8 @@
         jal     r1,(r2)         ; call compute(7)
 ret_main:
         ; r0 = result (16 = 0x10)
-        la      r1,0xFF0000
-        sb      r0,0(r1)        ; Display on LED
+        la      r1,0x000100
+        sb      r0,0(r1)        ; Store result to memory
 halt:   bra     halt
 
         ; --- compute(seed in r0) ---

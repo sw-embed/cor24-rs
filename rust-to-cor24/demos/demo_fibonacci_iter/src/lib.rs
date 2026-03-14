@@ -5,19 +5,12 @@
 
 #![no_std]
 
-const LED_ADDR: u16 = 0xFF00;
-const UART_DATA: u16 = 0xFF01;
+const RESULT_ADDR: u16 = 0x0100;
 
 #[inline(never)]
 #[no_mangle]
-pub unsafe fn mmio_write(addr: u16, val: u16) {
-    core::ptr::write_volatile(addr as *mut u8, val as u8);
-}
-
-#[inline(never)]
-#[no_mangle]
-pub unsafe fn uart_putc(ch: u16) {
-    mmio_write(UART_DATA, ch);
+pub unsafe fn mem_write(addr: u16, val: u8) {
+    core::ptr::write_volatile(addr as *mut u8, val);
 }
 
 /// Iterative fibonacci: fib(0)=1, fib(1)=1, fib(n)=fib(n-1)+fib(n-2)
@@ -41,7 +34,7 @@ pub fn fibonacci_iter(n: u16) -> u16 {
 #[no_mangle]
 pub unsafe fn demo_fibonacci_iter() {
     let result = fibonacci_iter(10);  // Should be 89
-    mmio_write(LED_ADDR, result);
+    mem_write(RESULT_ADDR, result as u8);
     loop {}
 }
 
@@ -54,14 +47,4 @@ pub unsafe fn start() -> ! {
 }
 
 #[panic_handler]
-fn panic(_: &core::panic::PanicInfo) -> ! {
-    unsafe {
-        uart_putc(b'P' as u16);
-        uart_putc(b'A' as u16);
-        uart_putc(b'N' as u16);
-        uart_putc(b'I' as u16);
-        uart_putc(b'C' as u16);
-        uart_putc(b'\n' as u16);
-    }
-    loop {}
-}
+fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
