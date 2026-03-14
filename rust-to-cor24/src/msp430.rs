@@ -8,16 +8,17 @@
 //! MSP430 calling convention uses r12-r14 for args, r12 for return.
 //! COR24 has only 3 GP registers (r0-r2).
 //!
-//! | MSP430 | COR24 | Role            |
-//! |--------|-------|-----------------|
-//! | r12    | r0    | arg0 / return   |
-//! | r13    | r1    | arg1            |
-//! | r14    | r2    | arg2            |
-//! | r1     | sp    | stack pointer   |
-//! | r0     | (PC)  | implicit        |
-//! | r2     | (SR)  | status register |
-//! | r3     | (CG)  | constant gen    |
-//! | r4-r11 | stack | spilled to fp-relative |
+//! | MSP430 | COR24 | Role              |
+//! |--------|-------|-------------------|
+//! | r12    | r0    | arg0 / return     |
+//! | r13    | spill | arg1 (27(fp))     |
+//! | r14    | r2    | arg2 / scratch    |
+//! | r1     | sp    | stack pointer     |
+//! | r0     | (PC)  | implicit          |
+//! | r2     | (SR)  | status register   |
+//! | r3     | (CG)  | constant gen      |
+//! | r4-r11 | spill | spilled to fp-relative |
+//! | (none) | r1    | return address (jal) |
 
 use anyhow::{Result, bail};
 
@@ -208,24 +209,25 @@ pub fn translate_msp430(msp_asm: &str, entry_point: &str) -> Result<String> {
 }
 
 /// Map MSP430 register number to COR24 register name.
-/// r12 -> r0, r13 -> r1, r14 -> r2
+/// r12 -> r0, r14 -> r2
 /// r1 (SP) -> sp
-/// r4-r15 -> spill slots accessed via fp-relative offsets
+/// r13, r4-r11, r15 -> spill slots accessed via fp-relative offsets
 ///
-/// For spilled registers, we return a COR24 GP register (r0-r2) that
-/// will be used as a proxy. The caller must load from/store to the
-/// spill slot as appropriate. For simple operand mapping in most
-/// instructions, we use r0 as the working register and emit
-/// load/store around it.
+/// COR24 r1 is reserved for the return address (set by `jal`).
+/// MSP430 r13 (which was previously mapped to r1) is now spilled to
+/// a fp-relative offset, like r4-r11 and r15.
+///
+/// For spilled registers, we return a marker string ("spill_N").
+/// The caller must load from/store to the spill slot as appropriate,
+/// using r0 or r1 as working registers with push/pop for safety.
 fn map_register(msp_reg: u8) -> Result<String> {
     match msp_reg {
         12 => Ok("r0".to_string()),
-        13 => Ok("r1".to_string()),
         14 => Ok("r2".to_string()),
         1 => Ok("sp".to_string()),
-        // Spilled registers: 4-11, 15
-        // These need special handling - return a marker
-        r @ (4..=11 | 15) => Ok(format!("spill_{}", r)),
+        // Spilled registers: r13 (arg1), r4-r11, r15
+        // r13 is spilled because COR24 r1 is reserved for return address (jal)
+        r @ (4..=11 | 13 | 15) => Ok(format!("spill_{}", r)),
         _ => bail!("register r{} not mappable", msp_reg),
     }
 }
@@ -250,7 +252,8 @@ fn spill_offset(reg: &str) -> u8 {
             9 => 5,
             10 => 6,
             11 => 7,
-            15 => 8,
+            13 => 8,
+            15 => 9,
             _ => 0,
         };
         slot * 3
@@ -290,7 +293,8 @@ fn map_base_register(msp_reg: u8, result: &mut Vec<String>, avoid: &str) -> Resu
         1 => {
             // SP can't be used as base in COR24 load/store.
             // Copy sp to a temp register and use that as base.
-            let base = if avoid == "r2" { "r1" } else { "r2" };
+            // r1 is reserved for return address — use r0 or r2
+            let base = if avoid == "r2" { "r0" } else { "r2" };
             result.push(format!("mov     {}, sp", base));
             Ok(base.to_string())
         }
@@ -394,11 +398,13 @@ fn translate_binary_op(cor24_op: &str, ops: &[MspOperand], byte_mode: bool) -> R
     // Handle spilled destination: push/save working reg, load spill, operate, store, pop/restore
     let (dst, dst_is_spill, dst_working) = if is_spill(&dst_raw) {
         // Pick a working register that doesn't conflict with the source GP register
+        // Pick a working register that doesn't conflict with the source GP register.
+        // Never use r1 — it's reserved for the return address.
         let w = match &ops[0] {
             MspOperand::Register(r) => {
                 match map_register(*r).unwrap_or_default().as_str() {
-                    "r0" => "r1",
-                    "r1" => "r0",
+                    "r0" => "r2",
+                    "r2" => "r0",
                     _ => "r0",
                 }
             }
@@ -415,8 +421,9 @@ fn translate_binary_op(cor24_op: &str, ops: &[MspOperand], byte_mode: bool) -> R
         MspOperand::Register(r) => {
             let src_raw = map_register(*r)?;
             if is_spill(&src_raw) {
-                // Load spilled source into a different working register, with push/pop
-                let w = if dst == "r0" { "r1" } else { "r0" };
+                // Load spilled source into a different working register, with push/pop.
+                // Never use r1 (return address).
+                let w = if dst == "r0" { "r2" } else { "r0" };
                 result.push(format!("push    {}", w));
                 let src = load_spill(&mut result, &src_raw, w);
                 result.push(format!("{:<8}{}, {}", cor24_op, dst, src));
@@ -471,11 +478,12 @@ fn translate_sub(ops: &[MspOperand], byte_mode: bool) -> Result<Vec<String>> {
     let mut result = Vec::new();
 
     let (dst, dst_is_spill, dst_working) = if is_spill(&dst_raw) {
+        // Never use r1 — reserved for return address
         let w = match &ops[0] {
             MspOperand::Register(r) => {
                 match map_register(*r).unwrap_or_default().as_str() {
-                    "r0" => "r1",
-                    "r1" => "r0",
+                    "r0" => "r2",
+                    "r2" => "r0",
                     _ => "r0",
                 }
             }
@@ -492,7 +500,8 @@ fn translate_sub(ops: &[MspOperand], byte_mode: bool) -> Result<Vec<String>> {
         MspOperand::Register(r) => {
             let src_raw = map_register(*r)?;
             if is_spill(&src_raw) {
-                let w = if dst == "r0" { "r1" } else { "r0" };
+                // Never use r1 (return address)
+                let w = if dst == "r0" { "r2" } else { "r0" };
                 result.push(format!("push    {}", w));
                 let src = load_spill(&mut result, &src_raw, w);
                 result.push(format!("sub     {}, {}", dst, src));
@@ -615,9 +624,14 @@ fn translate_mov(ops: &[MspOperand], byte_mode: bool) -> Result<Vec<String>> {
         // mov Rsrc, offset(Rdst) -> store word/byte
         (MspOperand::Register(src), MspOperand::Indexed(off, dst)) => {
             let s_raw = map_register(*src)?;
+            // Preview the base register to pick a non-conflicting working register
+            let d_preview = map_register(*dst).unwrap_or_default();
             let s = if is_spill(&s_raw) {
-                load_spill(&mut result, &s_raw, "r0");
-                "r0".to_string()
+                // Pick working register that doesn't conflict with base register.
+                // Never use r1 (return address).
+                let w = if d_preview == "r0" { "r2" } else { "r0" };
+                load_spill(&mut result, &s_raw, w);
+                w.to_string()
             } else {
                 s_raw
             };
@@ -716,7 +730,8 @@ fn translate_cmp(ops: &[MspOperand], byte_mode: bool, use_ceq: bool) -> Result<V
         MspOperand::Register(r) => {
             let src_raw = map_register(*r)?;
             if is_spill(&src_raw) {
-                let w = if dst == "r0" { "r1" } else { "r0" };
+                // Never use r1 (return address)
+                let w = if dst == "r0" { "r2" } else { "r0" };
                 result.push(format!("push    {}", w));
                 load_spill(&mut result, &src_raw, w);
                 if use_ceq {
@@ -806,8 +821,16 @@ fn translate_bit(ops: &[MspOperand]) -> Result<Vec<String>> {
     match &ops[0] {
         MspOperand::Immediate(imm) => {
             let tmp2 = temp_reg2(&dst, &tmp);
+            // temp_reg2 may return r1 if both r0 and r2 are in use — push/pop to protect return addr
+            let needs_save = tmp2 == "r1";
+            if needs_save {
+                result.push("push    r1".to_string());
+            }
             load_immediate(&mut result, &tmp2, *imm);
             result.push(format!("and     {}, {}", tmp, tmp2));
+            if needs_save {
+                result.push("pop     r1".to_string());
+            }
         }
         MspOperand::Register(r) => {
             let src = map_register(*r)?;
@@ -868,45 +891,42 @@ fn translate_cond_branch(is_jne: bool, ops: &[MspOperand]) -> Result<Vec<String>
     }
 }
 
-/// Translate CALL instruction.
+/// Translate CALL instruction using COR24's `jal` (jump-and-link).
 ///
-/// MSP430 `call` pushes return address to stack and jumps; all GP registers
-/// are preserved. COR24 `jal` stores return address in r1 (clobbering it),
-/// but the translated MSP430 code uses r1 freely (mapped from MSP430 r13).
+/// COR24 r1 is reserved for the return address. `jal r1,(r2)` saves
+/// the return address (next PC) in r1 and jumps to the target in r2.
 ///
-/// Until the register mapping is changed to reserve r1 for return addresses
-/// (Phase 2), we keep the stack-based return address mechanism:
-///   la  r2, .Lret_N     ; compute return address
-///   push r2              ; push to stack (like MSP430 call)
-///   la  r2, target       ; load target
-///   jmp (r2)             ; jump (preserves r0, r1)
-/// .Lret_N:
+/// For non-leaf functions (which make nested calls), r1 must be saved
+/// to the stack before the inner call overwrites it:
 ///
-/// This preserves r0 (arg0) and r1 (arg1) across the call.
-/// r2 (arg2) is clobbered but MSP430 r14 is caller-saved.
-fn translate_call(ops: &[MspOperand], call_counter: &mut usize) -> Result<Vec<String>> {
+///   push r1              ; save our return address before nested call
+///   la   r2, target      ; load target
+///   jal  r1, (r2)        ; call: r1 = next PC, jump to target
+///   pop  r1              ; restore our return address
+///
+/// r0 (arg0/return value) is preserved. r2 is clobbered (caller-saved).
+fn translate_call(ops: &[MspOperand], _call_counter: &mut usize) -> Result<Vec<String>> {
     let mut result = Vec::new();
-    let ret_label = format!(".Lret_{}", call_counter);
-    *call_counter += 1;
 
     match &ops[0] {
         MspOperand::Symbol(target) => {
             result.push(format!("; call {}", target));
-            result.push(format!("la      r2, {}", ret_label));
-            result.push("push    r2".to_string());
+            result.push("push    r1".to_string());
             result.push(format!("la      r2, {}", target));
-            result.push("jmp     (r2)".to_string());
-            result.push(format!("{}:", ret_label));
+            result.push("jal     r1, (r2)".to_string());
+            result.push("pop     r1".to_string());
         }
         MspOperand::Register(r) => {
             let src = map_register(*r)?;
-            result.push(format!("la      r2, {}", ret_label));
-            result.push("push    r2".to_string());
-            if src != "r2" {
+            result.push("push    r1".to_string());
+            if is_spill(&src) {
+                // Indirect call through a spilled register: load target into r2
+                load_spill(&mut result, &src, "r2");
+            } else if src != "r2" {
                 result.push(format!("mov     r2, {}", src));
             }
-            result.push("jmp     (r2)".to_string());
-            result.push(format!("{}:", ret_label));
+            result.push("jal     r1, (r2)".to_string());
+            result.push("pop     r1".to_string());
         }
         _ => bail!("unsupported call operand"),
     }
@@ -914,12 +934,11 @@ fn translate_call(ops: &[MspOperand], call_counter: &mut usize) -> Result<Vec<St
     Ok(result)
 }
 
-/// Translate RET -> pop return address from stack and jump to it.
-/// Matches MSP430 semantics where return address was pushed by call.
+/// Translate RET -> return via r1 (set by `jal` at the call site).
+/// r1 is reserved for the return address and not used for any other purpose.
 fn translate_ret() -> Vec<String> {
     vec![
-        "pop     r2".to_string(),
-        "jmp     (r2)".to_string(),
+        "jmp     (r1)".to_string(),
     ]
 }
 
@@ -964,8 +983,9 @@ fn skip_to_ret(lines: &[MspLine], call_idx: usize) -> usize {
 }
 
 /// Translate a tail call: `call #target` where next instruction is `ret`.
-/// Instead of push return addr / call / pop / ret, just jump to target.
-/// The callee returns directly to our caller (whose address is already on stack).
+/// Instead of call + ret, just jump to the target. r1 already holds our
+/// return address (set by our caller's `jal`), so when the tail-called
+/// function does `jmp (r1)`, it returns directly to our caller.
 fn translate_tail_call(inst: &MspInst) -> Result<Vec<String>> {
     let mut result = Vec::new();
     match &inst.operands[0] {
@@ -977,7 +997,9 @@ fn translate_tail_call(inst: &MspInst) -> Result<Vec<String>> {
         MspOperand::Register(r) => {
             let src = map_register(*r)?;
             result.push("; tail call (indirect)".to_string());
-            if src != "r2" {
+            if is_spill(&src) {
+                load_spill(&mut result, &src, "r2");
+            } else if src != "r2" {
                 result.push(format!("mov     r2, {}", src));
             }
             result.push("jmp     (r2)".to_string());
@@ -994,10 +1016,14 @@ fn translate_push(ops: &[MspOperand]) -> Result<Vec<String>> {
             let reg = map_register(*r)?;
             if is_spill(&reg) {
                 // Spilled register: load from spill slot, then push.
-                // Use r1 as working register to avoid clobbering r0 (arg0/return value)
+                // Can't use r1 (return address) as working register.
+                // Use r0 with scratch slot to preserve it:
+                //   save r0 → scratch, load spill → r0, push r0, restore r0 ← scratch
                 let mut result = Vec::new();
-                load_spill(&mut result, &reg, "r1");
-                result.push("push    r1".to_string());
+                result.push(format!("sw      r0, {}(fp)", SCRATCH_OFFSET));
+                load_spill(&mut result, &reg, "r0");
+                result.push("push    r0".to_string());
+                result.push(format!("lw      r0, {}(fp)", SCRATCH_OFFSET));
                 Ok(result)
             } else {
                 match reg.as_str() {
@@ -1021,11 +1047,15 @@ fn translate_pop(ops: &[MspOperand]) -> Result<Vec<String>> {
         MspOperand::Register(r) => {
             let reg = map_register(*r)?;
             if is_spill(&reg) {
-                // Spilled register: pop into r1, store to spill slot.
-                // Use r1 as working register to avoid clobbering r0 (return value)
+                // Spilled register: pop value, store to spill slot.
+                // Can't use r1 (return address) as working register.
+                // Use r0 with scratch slot:
+                //   save r0 → scratch, pop → r0, store r0 → spill, restore r0 ← scratch
                 let mut result = Vec::new();
-                result.push("pop     r1".to_string());
-                store_spill(&mut result, &reg, "r1");
+                result.push(format!("sw      r0, {}(fp)", SCRATCH_OFFSET));
+                result.push("pop     r0".to_string());
+                store_spill(&mut result, &reg, "r0");
+                result.push(format!("lw      r0, {}(fp)", SCRATCH_OFFSET));
                 Ok(result)
             } else {
                 match reg.as_str() {
@@ -1075,23 +1105,32 @@ fn load_immediate(result: &mut Vec<String>, reg: &str, value: i32) {
     }
 }
 
-/// Pick a temp register that isn't `avoid`
+/// Pick a temp register that isn't `avoid`.
+/// Never returns r1 — r1 is reserved for the return address (jal).
 fn temp_reg(avoid: &str) -> String {
     match avoid {
-        "r0" => "r1".to_string(),
+        "r0" => "r2".to_string(),
         _ => "r0".to_string(),
     }
 }
 
-/// Pick a temp register that isn't `avoid1` or `avoid2`
+/// Pick a temp register that isn't `avoid1` or `avoid2`.
+/// Prefers r0, r2 (skips r1 which is reserved for return address).
+/// Falls back to r1 only when both r0 and r2 are unavailable —
+/// caller MUST push/pop r1 in that case.
 fn temp_reg2(avoid1: &str, avoid2: &str) -> String {
-    for r in &["r0", "r1", "r2"] {
+    for r in &["r0", "r2"] {
         if *r != avoid1 && *r != avoid2 {
             return r.to_string();
         }
     }
-    "r2".to_string()
+    // Both r0 and r2 in use — must use r1 (caller must push/pop to preserve return addr)
+    "r1".to_string()
 }
+
+/// Scratch spill slot offset at fp for push/pop of spill registers.
+/// Used to temporarily save r0 when we can't use r1 (return address) as working register.
+const SCRATCH_OFFSET: u8 = 30;
 
 // ==========================================
 // MSP430 Assembly Parser
@@ -1339,10 +1378,12 @@ add:
 	ret
 "#;
         let result = translate_msp430(msp430, "add").unwrap();
-        assert!(result.contains("add     r0, r1"));
-        // ret = pop r2 + jmp (r2)
-        assert!(result.contains("pop     r2"));
-        assert!(result.contains("jmp     (r2)"));
+        // r13 is spilled: load spill_13 into r2 (working reg, avoids r0=dst), add, store back
+        assert!(result.contains("push    r2"), "should push working reg. Got:\n{}", result);
+        assert!(result.contains("lw      r2, 24(fp)"), "should load spill_13. Got:\n{}", result);
+        assert!(result.contains("add     r0, r2"), "add r0 (r12), r2 (spill_13). Got:\n{}", result);
+        // ret = jmp (r1) — r1 holds return address from jal
+        assert!(result.contains("jmp     (r1)"));
     }
 
     #[test]
@@ -1355,7 +1396,9 @@ bitmask:
 	ret
 "#;
         let result = translate_msp430(msp430, "bitmask").unwrap();
-        assert!(result.contains("and     r0, r1"));
+        // r13 is spilled: load into r2 (working reg), and with r0 (r12)
+        assert!(result.contains("lw      r2, 24(fp)"), "should load spill_13. Got:\n{}", result);
+        assert!(result.contains("and     r0, r2"), "and r0, r2 (spill_13). Got:\n{}", result);
     }
 
     #[test]
@@ -1382,7 +1425,9 @@ compare_branch:
 	ret
 "#;
         let result = translate_msp430(msp430, "start").unwrap();
-        assert!(result.contains("clu     r0, r1"));
+        // r13 is spilled: load into r2 (working reg, avoids r0=dst), clu r0, r2
+        assert!(result.contains("lw      r2, 24(fp)"), "should load spill_13. Got:\n{}", result);
+        assert!(result.contains("clu     r0, r2"), "clu with spilled r13. Got:\n{}", result);
         assert!(result.contains("brt     .LBB4_2"));
     }
 
@@ -1406,9 +1451,10 @@ blink_loop:
 "#;
         let result = translate_msp430(msp430, "start").unwrap();
         assert!(result.contains("bra     .LBB2_1"));
-        // Should have stack-based calls (push return addr, jmp)
-        assert!(result.contains("la      r2, mmio_write"));
-        assert!(result.contains("jmp     (r2)"));
+        // Calls use jal: push r1, la r2, jal r1,(r2), pop r1
+        assert!(result.contains("la      r2, mmio_write"), "should load call target. Got:\n{}", result);
+        assert!(result.contains("jal     r1, (r2)"), "should use jal for calls. Got:\n{}", result);
+        assert!(result.contains("push    r1"), "should save return addr. Got:\n{}", result);
         // I/O address should be mapped: -256 (0xFF00) -> 0xFF0000
         assert!(result.contains("la      r0, 0xFF0000"));
     }
@@ -1451,9 +1497,11 @@ demo_countdown:
 	jne	.LBB5_1
 "#;
         let result = translate_msp430(msp430, "start").unwrap();
-        // push r10: load spill_10 into r1 (avoids clobbering r0), push r1
-        assert!(result.contains("lw      r1, 18(fp)"));
-        assert!(result.contains("push    r1"));
+        // push r10: uses scratch slot to preserve r0, loads spill_10 into r0, pushes
+        assert!(result.contains("sw      r0, 30(fp)"), "should save r0 to scratch. Got:\n{}", result);
+        assert!(result.contains("lw      r0, 18(fp)"), "should load spill_10. Got:\n{}", result);
+        assert!(result.contains("push    r0"), "should push spill value. Got:\n{}", result);
+        assert!(result.contains("lw      r0, 30(fp)"), "should restore r0 from scratch. Got:\n{}", result);
         // mov #10, r10: push/pop r0 to preserve it, load 10 into r0, store to spill slot
         assert!(result.contains("lc      r0, 10"));
         assert!(result.contains("sw      r0, 18(fp)"));
@@ -1488,15 +1536,15 @@ fibonacci:
 	ret
 "#;
         let result = translate_msp430(msp430, "start").unwrap();
-        // r15 -> spill_15 (offset 24), r11 -> spill_11 (offset 21)
-        // mov r13, r11: store r1 to spill_11 slot
-        assert!(result.contains("sw      r1, 21(fp)"));
-        // mov r15, r13: load spill_15 into r1
-        assert!(result.contains("lw      r1, 24(fp)"));
-        // mov r11, r15: both spilled, should use r0 as intermediary
-        assert!(result.contains("lw      r0, 21(fp)"));
-        // ret = pop r2, jmp (r2)
-        assert!(result.contains("pop     r2"));
+        // r15 -> spill_15 (offset 27), r11 -> spill_11 (offset 21), r13 -> spill_13 (offset 24)
+        // mov r13, r11: both spilled, use r0 as intermediary
+        assert!(result.contains("lw      r0, 24(fp)"), "should load spill_13. Got:\n{}", result);
+        assert!(result.contains("sw      r0, 21(fp)"), "should store to spill_11. Got:\n{}", result);
+        // mov r15, r13: both spilled
+        assert!(result.contains("lw      r0, 27(fp)"), "should load spill_15. Got:\n{}", result);
+        assert!(result.contains("sw      r0, 24(fp)"), "should store to spill_13. Got:\n{}", result);
+        // ret = jmp (r1)
+        assert!(result.contains("jmp     (r1)"), "ret should use jmp (r1). Got:\n{}", result);
     }
 
     #[test]
@@ -1637,8 +1685,9 @@ main:
     #[test]
     fn test_spill_add_no_clobber() {
         // add r12, r10: r12->r0 (src), r10->spill_10 (dst)
-        // Working register for spill load must NOT be r0 (would clobber live r12 value)
-        // Must push/pop working register to preserve other live GP values
+        // Working register must NOT be r0 (would clobber live r12 value)
+        // Must NOT be r1 (reserved for return address)
+        // So must use r2
         let msp430 = r#"
 	.section	.text.test,"ax",@progbits
 test:
@@ -1646,18 +1695,19 @@ test:
 	ret
 "#;
         let result = translate_msp430(msp430, "start").unwrap();
-        // Should push r1 (working reg), load spill, operate, store, pop r1
-        assert!(result.contains("push    r1"), "should push working reg. Got:\n{}", result);
-        assert!(result.contains("lw      r1, 18(fp)"), "spill should load into r1. Got:\n{}", result);
-        assert!(result.contains("add     r1, r0"), "add should use r1 (spill) and r0 (r12). Got:\n{}", result);
-        assert!(result.contains("sw      r1, 18(fp)"), "result should be stored back. Got:\n{}", result);
-        assert!(result.contains("pop     r1"), "should pop working reg. Got:\n{}", result);
+        // Should push r2 (working reg), load spill, operate, store, pop r2
+        assert!(result.contains("push    r2"), "should push working reg r2. Got:\n{}", result);
+        assert!(result.contains("lw      r2, 18(fp)"), "spill should load into r2. Got:\n{}", result);
+        assert!(result.contains("add     r2, r0"), "add should use r2 (spill) and r0 (r12). Got:\n{}", result);
+        assert!(result.contains("sw      r2, 18(fp)"), "result should be stored back. Got:\n{}", result);
+        assert!(result.contains("pop     r2"), "should pop working reg. Got:\n{}", result);
     }
 
     #[test]
     fn test_spill_add_src_r13() {
-        // add r13, r10: r13->r1 (src), r10->spill_10 (dst)
-        // Working register should be r0 (since r1 is the source)
+        // add r13, r10: r13->spill_13 (src, offset 24), r10->spill_10 (dst, offset 18)
+        // Both operands are spilled. dst loads into r0 (working reg),
+        // src loads into r2 (different working reg), add, store back.
         let msp430 = r#"
 	.section	.text.test,"ax",@progbits
 test:
@@ -1665,9 +1715,13 @@ test:
 	ret
 "#;
         let result = translate_msp430(msp430, "start").unwrap();
-        assert!(result.contains("push    r0"), "should push working reg. Got:\n{}", result);
-        assert!(result.contains("lw      r0, 18(fp)"), "spill should load into r0. Got:\n{}", result);
-        assert!(result.contains("add     r0, r1"), "add should use r0 (spill) and r1 (r13). Got:\n{}", result);
+        // dst (r10/spill_10) loaded into working reg with push/pop
+        assert!(result.contains("push    r0"), "should push dst working reg. Got:\n{}", result);
+        assert!(result.contains("lw      r0, 18(fp)"), "should load spill_10. Got:\n{}", result);
+        // src (r13/spill_13) loaded into different working reg with push/pop
+        assert!(result.contains("push    r2"), "should push src working reg. Got:\n{}", result);
+        assert!(result.contains("lw      r2, 24(fp)"), "should load spill_13. Got:\n{}", result);
+        assert!(result.contains("add     r0, r2"), "add spill_10, spill_13. Got:\n{}", result);
     }
 
     #[test]
@@ -1701,9 +1755,10 @@ test:
 	ret
 "#;
         let result = translate_msp430(msp430, "start").unwrap();
-        // Should be a normal call with push/pop
-        assert!(result.contains("push    r2"), "non-tail call should push return addr. Got:\n{}", result);
-        assert!(result.contains(".Lret_"), "non-tail call should have return label. Got:\n{}", result);
+        // Should be a normal jal-based call: push r1, la r2, jal, pop r1
+        assert!(result.contains("push    r1"), "non-tail call should save return addr. Got:\n{}", result);
+        assert!(result.contains("jal     r1, (r2)"), "non-tail call should use jal. Got:\n{}", result);
+        assert!(result.contains("pop     r1"), "non-tail call should restore return addr. Got:\n{}", result);
     }
 
     #[test]
@@ -1717,7 +1772,9 @@ add:
 "#;
         let result = translate_msp430(msp430, "start").unwrap();
         assert!(!result.contains("Reset vector"), "Should not emit prologue without .globl");
-        assert!(result.contains("add     r0, r1"));
+        // r13 is spilled: load into working reg, add with r0
+        assert!(result.contains("lw      r2, 24(fp)"), "should load spill_13. Got:\n{}", result);
+        assert!(result.contains("add     r0, r2"), "add r0, spill_13. Got:\n{}", result);
     }
 
     #[test]
