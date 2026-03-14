@@ -136,13 +136,18 @@ All demos use byte-width MMIO (`sb`/`lb`) matching the hardware Verilog:
 | `0xFF0101` | `IO_UARTSTATUS` | UART status (bit 0: RX ready) |
 | `0xFF0110` | `IO_UARTINTENA` | UART interrupt enable (bit 0: RX interrupt) |
 
-## Calling Convention Note
+## Calling Convention
 
-The translator currently generates `push`/`jmp` sequences for function calls rather
-than using the COR24's `jal` (jump-and-link) instruction, which is the hardware's
-intended calling mechanism. A future update will switch to `jal` per the COR24
-architect's recommendation, saving ~4 bytes per call site. See
-[docs/research/20260314-cor24-plan.md](research/20260314-cor24-plan.md) for details.
+The translator generates `jal` (jump-and-link) based function calls, following the
+COR24 architect's recommended calling convention:
+- **Call**: `push r1; la r2, target; jal r1,(r2); pop r1`
+- **Return**: `jmp (r1)`
+- **Tail call**: `la r2, target; jmp (r2)` (r1 preserved from caller)
+- COR24 r1 is reserved for the return address; MSP430 r13 is spilled to a
+  fp-relative slot instead of mapping to r1.
+
+See [docs/research/20260314-cor24-plan.md](research/20260314-cor24-plan.md) for the
+full calling convention plan (Phase 1 complete, Phase 2-3 deferred).
 
 ## Source Files
 

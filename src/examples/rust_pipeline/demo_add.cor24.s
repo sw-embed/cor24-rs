@@ -9,27 +9,25 @@
 ; --- function: demo_add ---
 demo_add:
     la      r0, 0x000156
-    pop     r2
-    jmp     (r2)
+    jmp     (r1)
 .Lfunc_end0:
 
 ; --- function: start ---
 start:
     ; call demo_add
-    la      r2, .Lret_0
-    push    r2
+    push    r1
     la      r2, demo_add
-    jmp     (r2)
-    .Lret_0:
-    ; store result to memory at 0x0100
-    la      r1, 0x000100
-    sw      r0, 0(r1)
+    jal     r1, (r2)
+    pop     r1
+    ; TODO: mov (unsupported mov operand combination: Register(12) -> Absolute(()))
 .LBB1_1:
     bra     .LBB1_1
 .Lfunc_end1:
 
-; --- function: panic handler ---
+; --- function: _RNvCsgMG9zBUy57e_7___rustc17rust_begin_unwind ---
 _RNvCsgMG9zBUy57e_7___rustc17rust_begin_unwind:
 .LBB2_1:
     bra     .LBB2_1
 .Lfunc_end2:
+
+
