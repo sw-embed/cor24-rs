@@ -130,6 +130,13 @@ pub fn c_pipeline(props: &CPipelineProps) -> Html {
         let load_gen = props.load_generation;
         use_effect_with(load_gen, move |_| {
             current_step.set(CWizardStep::Source);
+            // Scroll notebook to top so source cell is visible
+            if let Some(window) = web_sys::window()
+                && let Some(document) = window.document()
+                && let Some(container) = document.get_element_by_id("c-notebook-scroll")
+            {
+                container.set_scroll_top(0);
+            }
             || ()
         });
     }
