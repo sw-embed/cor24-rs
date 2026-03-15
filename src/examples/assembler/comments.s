@@ -24,4 +24,4 @@
     add r0, r1      ; r0 = 300
 
 ; Stop by branching to self:
-done:   bra     done
+done:   bra     done    ; causes emulator halt
