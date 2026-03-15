@@ -214,14 +214,8 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
             let current = *current_step;
             if let Some(next) = current.next() {
                 current_step.set(next);
-                // Determine which cell to scroll to:
-                // - For Assemble step: scroll to Execution cell (the new cell)
-                // - For other steps: scroll to keep previous cell (N-1) at top
-                let scroll_to_cell = if next == WizardStep::Assemble {
-                    next.cell_id().to_string() // Scroll to Execution
-                } else {
-                    current.cell_id().to_string() // Scroll to previous cell (N-1)
-                };
+                // Scroll to the newly revealed cell
+                let scroll_to_cell = next.cell_id().to_string();
 
                 gloo::timers::callback::Timeout::new(100, move || {
                     if let Some(window) = web_sys::window()
