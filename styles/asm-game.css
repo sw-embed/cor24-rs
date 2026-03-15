@@ -1893,8 +1893,6 @@ header h1 {
     border: 1px solid #333;
     border-radius: 3px;
     min-width: 200px;
-    max-width: 600px;
-    overflow-x: auto;
     display: flex;
     flex-direction: column;
     gap: 2px;
