@@ -77,6 +77,11 @@ pub fn get_examples() -> Vec<(String, String, String)> {
             include_str!("examples/assembler/add.s").into(),
         ),
         (
+            "Assert".into(),
+            "Validate results with assertions (has a deliberate bug!)".into(),
+            include_str!("examples/assembler/assert.s").into(),
+        ),
+        (
             "Blink LED".into(),
             "Toggle LED with delay loop".into(),
             include_str!("examples/assembler/blink_led.s").into(),
