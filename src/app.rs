@@ -129,24 +129,6 @@ pub fn app() -> Html {
             href: None,
         },
         SidebarButton {
-            label: "Examples".to_string(),
-            onclick: {
-                let examples_open = examples_open.clone();
-                Callback::from(move |_| examples_open.set(true))
-            },
-            title: Some("Load example programs".to_string()),
-            href: None,
-        },
-        SidebarButton {
-            label: "Challenges".to_string(),
-            onclick: {
-                let challenges_open = challenges_open.clone();
-                Callback::from(move |_| challenges_open.set(true))
-            },
-            title: Some("Test your skills".to_string()),
-            href: None,
-        },
-        SidebarButton {
             label: "ISA Ref".to_string(),
             onclick: {
                 let isa_ref_open = isa_ref_open.clone();
@@ -1401,6 +1383,20 @@ pub fn app() -> Html {
 
             // Assembler Tab Content
             <div class={if *active_tab == "assembler" { "main-content" } else { "main-content hidden" }}>
+                <div class="editor-toolbar">
+                    <button class="toolbar-btn"
+                        data-tooltip="Load example programs"
+                        onclick={{
+                            let examples_open = examples_open.clone();
+                            Callback::from(move |_: MouseEvent| examples_open.set(true))
+                        }}>{"Examples"}</button>
+                    <button class="toolbar-btn"
+                        data-tooltip="Test your skills"
+                        onclick={{
+                            let challenges_open = challenges_open.clone();
+                            Callback::from(move |_: MouseEvent| challenges_open.set(true))
+                        }}>{"Challenges"}</button>
+                </div>
                 <ProgramArea
                     on_assemble={on_assemble}
                     on_step={{

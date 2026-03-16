@@ -271,10 +271,6 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
                         let cb = props.on_tutorial_open.clone();
                         Callback::from(move |_| cb.emit(()))
                     }>{"Tutorial"}</button>
-                    <button data-tooltip="Load a pre-built Rust example" onclick={
-                        let cb = props.on_examples_open.clone();
-                        Callback::from(move |_| cb.emit(()))
-                    }>{"Examples"}</button>
                     <button data-tooltip="COR24 instruction set reference" onclick={
                         let cb = props.on_isa_ref_open.clone();
                         Callback::from(move |_| cb.emit(()))
@@ -338,6 +334,14 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
 
             // Column 3: Notebook cells
             <div class="notebook-cells" id="notebook-scroll">
+                <div class="notebook-toolbar">
+                    <button class="toolbar-btn"
+                        data-tooltip="Load a pre-built Rust example"
+                        onclick={
+                            let cb = props.on_examples_open.clone();
+                            Callback::from(move |_: yew::MouseEvent| cb.emit(()))
+                        }>{"Examples"}</button>
+                </div>
                 if let Some(example) = &props.loaded_example {
                     // Cell 1: Rust Source (always visible)
                     <div class="notebook-cell" id="cell-source">

@@ -1700,6 +1700,30 @@ header h1 {
     background: #1a1a2e;
 }
 
+/* Toolbar above editor/notebook for Examples/Challenges buttons */
+.editor-toolbar, .notebook-toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 6px 0;
+    margin-bottom: 4px;
+}
+
+.toolbar-btn {
+    background: #1e1836;
+    color: #c792ea;
+    border: 1px solid #3d2e6b;
+    border-radius: 4px;
+    padding: 5px 14px;
+    font-size: 0.85em;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.toolbar-btn:hover {
+    background: #2d1f4e;
+    border-color: #7c3aed;
+}
+
 /* Notebook placeholder when no example loaded */
 .notebook-placeholder {
     display: flex;
