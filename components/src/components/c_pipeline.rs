@@ -2,7 +2,6 @@
 //! Shows the C compilation pipeline: C Source -> COR24 Assembly -> Execution
 //! Simpler than Rust pipeline (no MSP430 intermediate step).
 
-use wasm_bindgen::JsCast;
 use yew::prelude::*;
 
 use crate::components::debug_panel::DebugPanel;

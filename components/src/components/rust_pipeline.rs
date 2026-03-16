@@ -1,7 +1,6 @@
 //! Rust Pipeline view component - Wizard-driven 3-column layout
 //! Shows the compilation pipeline: Rust -> MSP430 ASM -> COR24 ASM -> Machine Code -> Execution
 
-use wasm_bindgen::JsCast;
 use yew::prelude::*;
 
 use crate::DebugPanel;
