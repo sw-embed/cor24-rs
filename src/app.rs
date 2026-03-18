@@ -99,6 +99,11 @@ pub fn app() -> Html {
     // Shared run speed: delay in ms between instructions (all tabs share this)
     // Default 10ms/instruction (~100 instr/sec)
     let run_speed_ms = use_mut_ref(|| Rc::new(Cell::new(10u32)));
+    // Run generation counters — incremented on load/reset, checked by run loop
+    // If the generation changes during a run, the loop exits immediately
+    let asm_run_gen = use_mut_ref(|| Rc::new(Cell::new(0u32)));
+    let rust_run_gen = use_mut_ref(|| Rc::new(Cell::new(0u32)));
+    let c_run_gen = use_mut_ref(|| Rc::new(Cell::new(0u32)));
 
     // Modal states
     let tutorial_open = use_state(|| false);
@@ -260,7 +265,7 @@ pub fn app() -> Html {
         cpu.clone(), asm_is_running.clone(), asm_emu_state.clone(),
         asm_stop_requested.borrow().clone(), shared_switches.borrow().clone(),
         asm_uart_queue.borrow().clone(), asm_uart_clear_flag.borrow().clone(),
-        run_speed_ms.borrow().clone(),
+        run_speed_ms.borrow().clone(), asm_run_gen.borrow().clone(),
     );
 
     let on_stop = {
@@ -304,14 +309,20 @@ pub fn app() -> Html {
         let asm_running = asm_is_running.clone();
         let rust_running = rust_is_running.clone();
         let c_running = c_is_running.clone();
+        let asm_gen = asm_run_gen.borrow().clone();
+        let rust_gen = rust_run_gen.borrow().clone();
+        let c_gen = c_run_gen.borrow().clone();
         Callback::from(move |tab: String| {
-            // Stop all running emulators when switching tabs
+            // Stop all running emulators and invalidate run loops
             asm_stop.set(true);
             rust_stop.set(true);
             c_stop.set(true);
             asm_running.set(false);
             rust_running.set(false);
             c_running.set(false);
+            asm_gen.set(asm_gen.get() + 1);
+            rust_gen.set(rust_gen.get() + 1);
+            c_gen.set(c_gen.get() + 1);
             active_tab.set(tab);
         })
     };
@@ -326,11 +337,13 @@ pub fn app() -> Html {
         let rust_load_gen = rust_load_gen.clone();
         let rust_load_counter = rust_load_counter.borrow().clone();
         let stop_flag = rust_stop_requested.borrow().clone();
+        let run_gen = rust_run_gen.borrow().clone();
 
         Callback::from(move |example: RustExample| {
-            // Stop any running execution
+            // Stop any running execution — increment generation to kill stale loops
             stop_flag.set(true);
             rust_is_running.set(false);
+            run_gen.set(run_gen.get() + 1);
             let new_gen = rust_load_counter.get() + 1;
             rust_load_counter.set(new_gen);
             rust_load_gen.set(new_gen);
@@ -402,7 +415,7 @@ pub fn app() -> Html {
         rust_cpu.clone(), rust_is_running.clone(), rust_emu_state.clone(),
         rust_stop_requested.borrow().clone(), rust_shared_switches.borrow().clone(),
         rust_uart_queue.borrow().clone(), rust_uart_clear_flag.borrow().clone(),
-        run_speed_ms.borrow().clone(),
+        run_speed_ms.borrow().clone(), rust_run_gen.borrow().clone(),
     );
 
     // Rust pipeline: Stop execution
@@ -534,10 +547,12 @@ pub fn app() -> Html {
         let c_load_gen = c_load_gen.clone();
         let c_load_counter = c_load_counter.borrow().clone();
         let stop_flag = c_stop_requested.borrow().clone();
+        let run_gen = c_run_gen.borrow().clone();
 
         Callback::from(move |example: CExample| {
             stop_flag.set(true);
             c_is_running.set(false);
+            run_gen.set(run_gen.get() + 1);
             let new_gen = c_load_counter.get() + 1;
             c_load_counter.set(new_gen);
             c_load_gen.set(new_gen);
@@ -604,7 +619,7 @@ pub fn app() -> Html {
         c_cpu.clone(), c_is_running.clone(), c_emu_state.clone(),
         c_stop_requested.borrow().clone(), c_shared_switches.borrow().clone(),
         c_uart_queue.borrow().clone(), c_uart_clear_flag.borrow().clone(),
-        run_speed_ms.borrow().clone(),
+        run_speed_ms.borrow().clone(), c_run_gen.borrow().clone(),
     );
 
     // C pipeline: Stop execution
@@ -993,12 +1008,14 @@ pub fn app() -> Html {
                     let asm_load_gen = asm_load_gen.clone();
                     let asm_load_counter = asm_load_counter.borrow().clone();
                     let asm_example_name = asm_example_name.clone();
+                    let asm_rg = asm_run_gen.borrow().clone();
                     Callback::from(move |idx: usize| {
                         if let Some((name, _, code)) = examples.get(idx) {
                             asm_example_name.set(Some(name.clone()));
                             // Stop any running animation loop
                             stop_flag.set(true);
                             asm_is_running.set(false);
+                            asm_rg.set(asm_rg.get() + 1);
                             asm_assembled.set(false);
                             cpu.set(WasmCpu::new());
                             asm_emu_state.set(EmulatorState::default());
@@ -1563,7 +1580,14 @@ fn run_one_instruction(
     uart_clear_handle: Rc<Cell<bool>>,
     speed_handle: Rc<Cell<u32>>,
     led_on_count: u64,
+    run_gen: Rc<Cell<u32>>,
+    my_gen: u32,
 ) {
+    // If generation changed (example loaded or reset), exit immediately
+    if run_gen.get() != my_gen {
+        running_handle.set(false);
+        return;
+    }
     if stop_handle.get() {
         let mut s = capture_cpu_state(&current_cpu, &state_handle);
         s.led_on_count = led_on_count;
@@ -1631,7 +1655,7 @@ fn run_one_instruction(
     } else {
         let yield_delay = delay.max(1);
         gloo::timers::callback::Timeout::new(yield_delay, move || {
-            run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle, total_on);
+            run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle, total_on, run_gen, my_gen);
         }).forget();
     }
 }
@@ -1663,6 +1687,7 @@ fn make_run_callback(
     uart_queue: Rc<RefCell<VecDeque<u8>>>,
     uart_clear: Rc<Cell<bool>>,
     speed: Rc<Cell<u32>>,
+    run_gen: Rc<Cell<u32>>,
 ) -> Callback<()> {
     Callback::from(move |()| {
         is_running.set(true);
@@ -1670,6 +1695,8 @@ fn make_run_callback(
         uart_clear.set(false);
         switches.set((*cpu).get_switches());
 
+        // Capture current generation — if it changes, loop exits
+        let my_gen = run_gen.get();
         let cpu_handle = cpu.clone();
         let running_handle = is_running.clone();
         let state_handle = emu_state.clone();
@@ -1679,10 +1706,11 @@ fn make_run_callback(
         let uart_handle = uart_queue.clone();
         let uart_clear_handle = uart_clear.clone();
         let speed_handle = speed.clone();
+        let gen_handle = run_gen.clone();
 
         gloo::timers::callback::Timeout::new(0, move || {
             run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle,
-                stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle, 0);
+                stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle, 0, gen_handle, my_gen);
         }).forget();
     })
 }
