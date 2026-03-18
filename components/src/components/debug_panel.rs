@@ -109,32 +109,15 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
         ("READY", "emu-state emu-ready")
     };
 
-    // LED display: when running show duty cycle %, when paused show actual hardware state
+    // LED display: show current state, duty cycle in tooltip
     let led_is_on = (state.led_value & 1) == 1;
     let duty = state.led_duty_cycle;
-    let (led_class, led_status, led_style) = if props.is_running {
-        // Running: show duty cycle with proportional opacity
-        let class = if duty > 0.0 { "led led-on led-large" } else { "led led-off led-large" };
-        let status = if duty > 0.01 && duty < 0.99 {
-            format!("{:.0}%", duty * 100.0)
-        } else if duty >= 0.99 {
-            " ON".to_string()
-        } else {
-            "OFF".to_string()
-        };
-        let style = if duty > 0.0 && duty < 1.0 {
-            format!("opacity: {:.2};", 0.3 + duty * 0.7)
-        } else {
-            String::new()
-        };
-        (class, status, style)
+    let led_class = if led_is_on { "led led-on led-large" } else { "led led-off led-large" };
+    let led_status = if led_is_on { " ON" } else { "OFF" };
+    let led_tooltip = if state.instruction_count > 0 {
+        format!("LED D2: {} (duty cycle: {:.0}%)", led_status.trim(), duty * 100.0)
     } else {
-        // Paused: show actual binary LED state
-        if led_is_on {
-            ("led led-on led-large", " ON".to_string(), String::new())
-        } else {
-            ("led led-off led-large", "OFF".to_string(), String::new())
-        }
+        format!("LED D2: {}", led_status.trim())
     };
     let switch_on = (props.switch_value & 1) == 1;
     let switch_class = if switch_on { "switch switch-on switch-large" } else { "switch switch-off switch-large" };
@@ -357,7 +340,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                             <span class="io-inline-status">{switch_status}</span>
                         </div>
                         <div class="peripheral-section-inline">
-                            <div class={led_class} style={led_style}>{"D2"}</div>
+                            <div class={led_class} data-tooltip={led_tooltip.clone()}>{"D2"}</div>
                             <span class="io-inline-status">{led_status}</span>
                         </div>
                         <div class="uart-panel" data-tooltip="UART I/O (0xFF0100). Click input to type characters.">

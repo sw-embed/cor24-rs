@@ -1755,8 +1755,12 @@ fn capture_cpu_state(cpu: &WasmCpu, prev: &EmulatorState) -> EmulatorState {
         condition_flag: cpu.get_condition_flag(),
         is_halted: cpu.is_halted(),
         led_value: cpu.get_led_value(),
-        led_duty_cycle: if (cpu.get_led_value() & 1) == 1 { 1.0 } else { 0.0 },
-        led_on_count: 0,
+        led_on_count: prev.led_on_count + if (cpu.get_led_value() & 1) == 1 { 1 } else { 0 },
+        led_duty_cycle: {
+            let on = prev.led_on_count + if (cpu.get_led_value() & 1) == 1 { 1 } else { 0 };
+            let total = cpu.get_instruction_count() as u64;
+            if total > 0 { on as f32 / total as f32 } else { 0.0 }
+        },
         instruction_count: cpu.get_instruction_count(),
         memory_low: memory_low.clone(),
         memory_io_led: memory_io_led.clone(),
