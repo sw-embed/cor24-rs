@@ -220,87 +220,96 @@ fn run_one_test(name: &str, source: &str, executor: &Executor) -> SelfTestResult
 }
 
 fn check_expected(name: &str, cpu: &CpuState) -> SelfTestResult {
-    let (pass, detail) = match name {
+    let mut checks: Vec<(&str, String, String, bool)> = Vec::new(); // (label, expected, actual, pass)
+
+    match name {
         "Add" => {
             let val = cpu.read_byte(256);
-            (cpu.halted && val == 0x56,
-             format!("halted={}, mem[256]=0x{:02X} (expect 0x56)", cpu.halted, val))
+            checks.push(("halted", "true".into(), format!("{}", cpu.halted), cpu.halted));
+            checks.push(("mem[256]", "0x56".into(), format!("0x{:02X}", val), val == 0x56));
         }
         "Assert" => {
-            // Has deliberate bug — halts at assert_fail, not all_pass
-            (cpu.halted, format!("halted={} (expect halted at assert_fail)", cpu.halted))
+            checks.push(("halted", "true".into(), format!("{}", cpu.halted), cpu.halted));
         }
         "Blink LED" => {
-            // Should be running (not halted), LED should have toggled
-            let count = cpu.instructions;
-            (!cpu.halted && count > 10,
-             format!("running={}, instructions={}", !cpu.halted, count))
+            checks.push(("running", "true".into(), format!("{}", !cpu.halted), !cpu.halted));
+            checks.push(("instructions", ">10".into(), format!("{}", cpu.instructions), cpu.instructions > 10));
         }
         "Button Echo" => {
-            // After pressing S2, LED should be ON (bit 0 = 1)
             let led = cpu.io.leds & 1;
-            (!cpu.halted && led == 1,
-             format!("running={}, LED={} (expect 1 when S2 pressed)", !cpu.halted, led))
+            checks.push(("running", "true".into(), format!("{}", !cpu.halted), !cpu.halted));
+            checks.push(("LED (S2 pressed)", "1".into(), format!("{}", led), led == 1));
         }
         "Comments" => {
             let r0 = cpu.get_reg(0);
-            (cpu.halted && r0 == 300,
-             format!("halted={}, r0={} (expect 300)", cpu.halted, r0))
+            checks.push(("halted", "true".into(), format!("{}", cpu.halted), cpu.halted));
+            checks.push(("r0", "300".into(), format!("{}", r0), r0 == 300));
         }
         "Countdown" => {
             let val = cpu.read_byte(256);
-            (cpu.halted && val == 0,
-             format!("halted={}, mem[256]={} (expect 0)", cpu.halted, val))
+            checks.push(("halted", "true".into(), format!("{}", cpu.halted), cpu.halted));
+            checks.push(("mem[256]", "0".into(), format!("{}", val), val == 0));
         }
         "Echo" => {
-            // After sending 'a', should echo 'A' (uppercase)
             let has_a = cpu.io.uart_output.contains('A');
-            (!cpu.halted && has_a,
-             format!("UART contains 'A'={}, output={:?}", has_a, &cpu.io.uart_output))
+            checks.push(("running", "true".into(), format!("{}", !cpu.halted), !cpu.halted));
+            checks.push(("UART has 'A'", "true".into(), format!("{} ({:?})", has_a, &cpu.io.uart_output), has_a));
         }
         "Fibonacci" => {
             let expected = "1 1 2 3 5 8 13 21 34 55\n";
-            (cpu.halted && cpu.io.uart_output == expected,
-             format!("halted={}, UART={:?} (expect {:?})", cpu.halted, &cpu.io.uart_output, expected))
+            checks.push(("halted", "true".into(), format!("{}", cpu.halted), cpu.halted));
+            checks.push(("UART", format!("{:?}", expected), format!("{:?}", &cpu.io.uart_output), cpu.io.uart_output == expected));
         }
         "Literals" => {
-            // Should halt at all_pass (not assert_fail)
-            (cpu.halted, format!("halted={} (expect halted at all_pass)", cpu.halted))
+            checks.push(("halted", "true".into(), format!("{}", cpu.halted), cpu.halted));
         }
         "Loop Trace" => {
-            (!cpu.halted && cpu.instructions > 10,
-             format!("running={}, instructions={}", !cpu.halted, cpu.instructions))
+            checks.push(("running", "true".into(), format!("{}", !cpu.halted), !cpu.halted));
+            checks.push(("instructions", ">10".into(), format!("{}", cpu.instructions), cpu.instructions > 10));
         }
         "Memory Access" => {
             let v1 = cpu.read_byte(256);
             let v2 = cpu.read_byte(512);
-            (cpu.halted && v1 == 42 && v2 == 200,
-             format!("halted={}, mem[256]={} (expect 42), mem[512]={} (expect 200)", cpu.halted, v1, v2))
+            checks.push(("halted", "true".into(), format!("{}", cpu.halted), cpu.halted));
+            checks.push(("mem[256]", "42".into(), format!("{}", v1), v1 == 42));
+            checks.push(("mem[512]", "200".into(), format!("{}", v2), v2 == 200));
         }
         "Multiply" => {
             let expected = "42 42\n";
-            (cpu.halted && cpu.io.uart_output == expected,
-             format!("halted={}, UART={:?} (expect {:?})", cpu.halted, &cpu.io.uart_output, expected))
+            checks.push(("halted", "true".into(), format!("{}", cpu.halted), cpu.halted));
+            checks.push(("UART", format!("{:?}", expected), format!("{:?}", &cpu.io.uart_output), cpu.io.uart_output == expected));
         }
         "Nested Calls" => {
             let r0 = cpu.get_reg(0);
-            (cpu.halted && r0 == 33,
-             format!("halted={}, r0={} (expect 33)", cpu.halted, r0))
+            checks.push(("halted", "true".into(), format!("{}", cpu.halted), cpu.halted));
+            checks.push(("r0", "33".into(), format!("{}", r0), r0 == 33));
         }
         "Stack Variables" => {
             let val = cpu.read_byte(256);
-            (cpu.halted && val == 16,
-             format!("halted={}, mem[256]={} (expect 16)", cpu.halted, val))
+            checks.push(("halted", "true".into(), format!("{}", cpu.halted), cpu.halted));
+            checks.push(("mem[256]", "16".into(), format!("{}", val), val == 16));
         }
         "UART Hello" => {
             let expected = "Hello\n";
-            (cpu.halted && cpu.io.uart_output == expected,
-             format!("halted={}, UART={:?} (expect {:?})", cpu.halted, &cpu.io.uart_output, expected))
+            checks.push(("halted", "true".into(), format!("{}", cpu.halted), cpu.halted));
+            checks.push(("UART", format!("{:?}", expected), format!("{:?}", &cpu.io.uart_output), cpu.io.uart_output == expected));
         }
         _ => {
-            (false, format!("No expected state defined for '{}'", name))
+            checks.push(("defined", "true".into(), "false".into(), false));
         }
-    };
+    }
+
+    let pass = checks.iter().all(|c| c.3);
+    let detail = checks.iter()
+        .map(|(label, expected, actual, ok)| {
+            if *ok {
+                format!("{}: {}", label, actual)
+            } else {
+                format!("{}: expected {}, actual {}", label, expected, actual)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
 
     SelfTestResult {
         name: name.to_string(),

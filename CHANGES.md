@@ -2,16 +2,18 @@
 
 ## 2026-03-18
 
-- Self-test mode: ?selftest URL runs all 15 examples, checks expected state
+- Self-test mode: ?selftest runs all 15 examples, ?selftestbad injects failure
+  Formatted panel with green/red per-test rows, expected/actual on failure
+- Self-test detail format: "label: expected X, actual Y" for failures
 - Fix stale EXAMPLE_PROGRAM: replace hardcoded copy with include_str!
 - Fix Rust Button Echo: add XOR inversion for S2 active-low switch
 - LED duty cycle tooltip restored (accumulates via run loop parameter)
+- LED label "_ON"/"OFF" fixed-width (non-collapsible underscore)
 - Blink LED: balanced 50% duty cycle with editable nop padding
 - ID-based listing auto-scroll: instant jump to current PC during Run
 - Remove scroll-behavior:smooth that caused slow listing scroll lag
 - Log-scale speed slider: 10/s left, 100/s center, 1000/s right
 - Show example name in Program Editor heading
-- LED label " ON"/"OFF" fixed-width to prevent layout shift
 - Remove delay loops from Countdown and Blink LED assembler examples
 - Reduce Rust pipeline delay loops (5000→10 iterations)
 - Per-instruction run loop replaces 500-batch loop (no browser freeze)
