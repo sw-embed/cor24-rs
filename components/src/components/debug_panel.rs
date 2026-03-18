@@ -4,7 +4,6 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use wasm_bindgen::JsCast;
 use web_sys::KeyboardEvent;
 use yew::prelude::*;
 
@@ -80,24 +79,18 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
         let instruction_count = state.instruction_count;
         let scroll_id = props.listing_scroll_id.clone().unwrap_or_else(|| "debug-asm-listing-scroll".to_string());
         use_effect_with((pc, instruction_count), move |_| {
-            if let Some(window) = web_sys::window()
-                && let Some(document) = window.document()
-                && let Some(container) = document.get_element_by_id(&scroll_id)
-                && let Some(element) = container.query_selector(".asm-line.current-line").ok().flatten()
-            {
-                let element_html: &web_sys::HtmlElement = element.unchecked_ref();
-                let container_html: &web_sys::HtmlElement = container.unchecked_ref();
-                let element_top = element_html.offset_top();
-                let container_height = container_html.client_height();
-                let container_scroll = container.scroll_top();
-                let element_bottom = element_top + 20;
-                let visible_top = container_scroll;
-                let visible_bottom = container_scroll + container_height;
-                if element_top < visible_top || element_bottom > visible_bottom {
-                    let target_scroll = element_top - (container_height / 3);
-                    container.set_scroll_top(target_scroll.max(0));
+            // Use gloo timeout to ensure DOM has updated with new .current-line
+            gloo::timers::callback::Timeout::new(0, move || {
+                if let Some(window) = web_sys::window()
+                    && let Some(document) = window.document()
+                    && let Some(container) = document.get_element_by_id(&scroll_id)
+                    && let Some(element) = container.query_selector(".asm-line.current-line").ok().flatten()
+                {
+                    // scrollIntoView with block:"nearest" avoids jarring jumps
+                    // but ensures the line is visible
+                    element.scroll_into_view();
                 }
-            }
+            }).forget();
         });
     }
 
@@ -249,7 +242,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                                         // Log scale: slider 0-100 maps to 10-1000 ips
                                         // ips = 10^(1 + v/50), ms = 1000/ips
                                         let ips = 10f64.powf(1.0 + v as f64 / 50.0);
-                                        let new_ms = (1000.0 / ips).round().max(1.0).min(100.0) as u32;
+                                        let new_ms = (1000.0 / ips).round().clamp(1.0, 100.0) as u32;
                                         speed_rc.set(new_ms);
                                         speed_display.set(new_ms);
                                 }
