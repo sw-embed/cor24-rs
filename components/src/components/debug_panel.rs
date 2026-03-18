@@ -1,6 +1,9 @@
 //! Shared debug panel component — registers, emulator state, I/O, and memory
 //! Used by both the Assembler tab and the Rust Pipeline tab.
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use wasm_bindgen::JsCast;
 use web_sys::KeyboardEvent;
 use yew::prelude::*;
@@ -56,6 +59,9 @@ pub struct DebugPanelProps {
     /// Set to false when assembly is already shown elsewhere (e.g. ProgramArea).
     #[prop_or(true)]
     pub show_listing: bool,
+    /// Shared run speed: delay in ms between instructions (default 20ms)
+    #[prop_or_default]
+    pub run_speed_ms: Option<Rc<Cell<u32>>>,
 }
 
 #[function_component(DebugPanel)]
@@ -221,6 +227,24 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                     data-tooltip="Reset CPU to initial state, clear memory, load program">
                     {"Reset"}
                 </button>
+                if let Some(speed_rc) = &props.run_speed_ms {
+                    <span class="speed-label">{"Speed:"}</span>
+                    <input type="range" class="speed-slider"
+                        min="1" max="200" value={format!("{}", 201 - speed_rc.get())}
+                        data-tooltip={format!("{}ms/instruction", speed_rc.get())}
+                        oninput={{
+                            let speed_rc = speed_rc.clone();
+                            Callback::from(move |e: InputEvent| {
+                                if let Some(input) = e.target_dyn_into::<web_sys::HtmlInputElement>() {
+                                    if let Ok(v) = input.value().parse::<u32>() {
+                                        // Slider goes 1-200, map to delay: 200-1ms
+                                        speed_rc.set(201 - v);
+                                    }
+                                }
+                            })
+                        }}
+                    />
+                }
             </div>
 
             // Debug content — two-column with listing, or single-column without

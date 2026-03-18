@@ -1,6 +1,9 @@
 //! Rust Pipeline view component - Wizard-driven 3-column layout
 //! Shows the compilation pipeline: Rust -> MSP430 ASM -> COR24 ASM -> Machine Code -> Execution
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use yew::prelude::*;
 
 use crate::DebugPanel;
@@ -159,6 +162,9 @@ pub struct RustPipelineProps {
     pub on_uart_send: Callback<u8>,
     #[prop_or_default]
     pub on_uart_clear: Callback<()>,
+    /// Shared run speed for the speed slider
+    #[prop_or_default]
+    pub run_speed_ms: Option<Rc<Cell<u32>>>,
     // Modal callbacks - passed from app.rs
     #[prop_or_default]
     pub on_tutorial_open: Callback<()>,
@@ -393,6 +399,7 @@ pub fn rust_pipeline(props: &RustPipelineProps) -> Html {
                                 on_uart_send={props.on_uart_send.clone()}
                                 on_uart_clear={props.on_uart_clear.clone()}
                                 listing_scroll_id={"asm-listing-scroll".to_string()}
+                                run_speed_ms={props.run_speed_ms.clone()}
                             />
                         </div>
                     }

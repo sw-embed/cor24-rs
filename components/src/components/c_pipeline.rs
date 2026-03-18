@@ -2,6 +2,9 @@
 //! Shows the C compilation pipeline: C Source -> COR24 Assembly -> Execution
 //! Simpler than Rust pipeline (no MSP430 intermediate step).
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use yew::prelude::*;
 
 use crate::components::debug_panel::DebugPanel;
@@ -94,6 +97,8 @@ pub struct CPipelineProps {
     pub on_uart_send: Callback<u8>,
     #[prop_or_default]
     pub on_uart_clear: Callback<()>,
+    #[prop_or_default]
+    pub run_speed_ms: Option<Rc<Cell<u32>>>,
     #[prop_or_default]
     pub on_tutorial_open: Callback<()>,
     #[prop_or_default]
@@ -300,6 +305,7 @@ pub fn c_pipeline(props: &CPipelineProps) -> Html {
                                 on_uart_send={props.on_uart_send.clone()}
                                 on_uart_clear={props.on_uart_clear.clone()}
                                 listing_scroll_id={"c-asm-listing-scroll".to_string()}
+                                run_speed_ms={props.run_speed_ms.clone()}
                             />
                         </div>
                     }

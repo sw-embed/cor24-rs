@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use components::{
     CExample, CPipeline, DebugPanel, ExampleItem, ExamplePicker, Header, Modal, ProgramArea,
-    EmulatorState, RustExample, RustPipeline, Sidebar, SidebarButton, SparseMemory, Tab, TabBar, Tooltip,
+    EmulatorState, RustExample, RustPipeline, Sidebar, SidebarButton, Tab, TabBar, Tooltip,
 };
 use yew::prelude::*;
 
@@ -77,6 +77,8 @@ pub fn app() -> Html {
     let asm_uart_queue = use_mut_ref(|| Rc::new(RefCell::new(VecDeque::<u8>::new())));
     // Shared flag for UART clear during animated run
     let asm_uart_clear_flag = use_mut_ref(|| Rc::new(Cell::new(false)));
+    // Shared run speed: delay in ms between instructions (all tabs share this)
+    let run_speed_ms = use_mut_ref(|| Rc::new(Cell::new(20u32)));
 
     // Modal states
     let tutorial_open = use_state(|| false);
@@ -236,132 +238,32 @@ pub fn app() -> Html {
 
     let on_run = {
         let cpu = cpu.clone();
-        let assembly_output = assembly_output.clone();
         let asm_is_running = asm_is_running.clone();
         let asm_emu_state = asm_emu_state.clone();
         let stop_flag = asm_stop_requested.borrow().clone();
         let switches = shared_switches.borrow().clone();
         let uart_q = asm_uart_queue.borrow().clone();
         let uart_clear = asm_uart_clear_flag.borrow().clone();
+        let speed = run_speed_ms.borrow().clone();
 
         Callback::from(move |()| {
-            // Start animated run
             asm_is_running.set(true);
             stop_flag.set(false);
             uart_clear.set(false);
-
-            // Initialize shared switch state from current CPU
             switches.set((*cpu).get_switches());
 
             let cpu_handle = cpu.clone();
-            let output_handle = assembly_output.clone();
             let running_handle = asm_is_running.clone();
             let state_handle = asm_emu_state.clone();
+            let current_cpu = (*cpu).clone();
             let stop_handle = stop_flag.clone();
             let switch_handle = switches.clone();
             let uart_handle = uart_q.clone();
             let uart_clear_handle = uart_clear.clone();
-            let current_cpu = (*cpu).clone();
+            let speed_handle = speed.clone();
 
-            // Start the animated run loop
-            #[allow(clippy::too_many_arguments)]
-            fn run_step(
-                mut current_cpu: WasmCpu,
-                cpu_handle: yew::UseStateHandle<WasmCpu>,
-                output_handle: yew::UseStateHandle<Option<Html>>,
-                running_handle: yew::UseStateHandle<bool>,
-                state_handle: yew::UseStateHandle<EmulatorState>,
-                stop_handle: Rc<Cell<bool>>,
-                switch_handle: Rc<Cell<u8>>,
-                uart_handle: Rc<RefCell<VecDeque<u8>>>,
-                uart_clear_handle: Rc<Cell<bool>>,
-                cumulative_led_on: u64,
-            ) {
-                // Check if stop was requested (immediate - no state delay)
-                if stop_handle.get() {
-                    state_handle.set(capture_cpu_state(&current_cpu, &state_handle));
-                    cpu_handle.set(current_cpu);
-                    running_handle.set(false);
-                    output_handle.set(Some(yew::html! {
-                        <div class="info-text">
-                            {"⏹ Execution stopped"}
-                        </div>
-                    }));
-                    return;
-                }
-
-                // Check if UART clear was requested
-                if uart_clear_handle.get() {
-                    uart_clear_handle.set(false);
-                    current_cpu.clear_uart_output();
-                }
-
-                // Read switch state from shared Rc<Cell> (updated by switch onclick)
-                current_cpu.set_switches(switch_handle.get());
-
-                // Drain any pending UART input bytes
-                {
-                    let mut q = uart_handle.borrow_mut();
-                    while let Some(byte) = q.pop_front() {
-                        current_cpu.uart_send_char(byte as char);
-                    }
-                }
-
-                // Execute a batch of instructions per animation frame
-                let mut halted = false;
-                let mut error_msg = None;
-                let mut batch_led_on: u64 = 0;
-                for _ in 0..500 {
-                    if current_cpu.is_halted() {
-                        halted = true;
-                        break;
-                    }
-                    if let Err(e) = current_cpu.step() {
-                        error_msg = Some(format!("{:?}", e));
-                        halted = true;
-                        break;
-                    }
-                    if current_cpu.get_led_value() & 1 == 1 {
-                        batch_led_on += 1;
-                    }
-                }
-
-                // Update CPU state for UI refresh (includes LED state)
-                current_cpu.set_switches(switch_handle.get());
-                let mut state = capture_cpu_state(&current_cpu, &state_handle);
-                let total_on = cumulative_led_on + batch_led_on;
-                state.led_on_count = total_on;
-                let total_instr = state.instruction_count as u64;
-                state.led_duty_cycle = if total_instr > 0 { total_on as f32 / total_instr as f32 } else { 0.0 };
-                state_handle.set(state);
-                cpu_handle.set(current_cpu.clone());
-
-                if halted {
-                    running_handle.set(false);
-                    if let Some(err) = error_msg {
-                        output_handle.set(Some(yew::html! {
-                            <div class="error-text">
-                                {format!("Error: {}", err)}
-                            </div>
-                        }));
-                    } else {
-                        output_handle.set(Some(yew::html! {
-                            <div class="success-text">
-                                {"✓ Program completed"}
-                            </div>
-                        }));
-                    }
-                } else {
-                    // Continue running - 50ms delay allows browser to process input events
-                    gloo::timers::callback::Timeout::new(50, move || {
-                        run_step(current_cpu, cpu_handle, output_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, total_on);
-                    }).forget();
-                }
-            }
-
-            // Start the first step
             gloo::timers::callback::Timeout::new(0, move || {
-                run_step(current_cpu, cpu_handle, output_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, 0);
+                run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle);
             }).forget();
         })
     };
@@ -559,181 +461,26 @@ pub fn app() -> Html {
         let switch_value = rust_switch_value.clone();
         let uart_q = rust_uart_queue.borrow().clone();
         let uart_clear = rust_uart_clear_flag.borrow().clone();
+        let speed = run_speed_ms.borrow().clone();
 
         Callback::from(move |()| {
-            // Clear stop flag and sync switch state
             stop_flag.borrow().set(false);
             switch_state.borrow().set(*switch_value);
             uart_clear.set(false);
-
             rust_is_running.set(true);
+
             let cpu_handle = rust_cpu.clone();
-            let running = rust_is_running.clone();
-            let state = rust_emu_state.clone();
-            let asm_lines = state.assembled_lines.clone();
-            let initial_cpu = (*rust_cpu).clone();
-            let prev_regs = state.registers;
-            let prev_prev_regs = state.prev_registers;
-            let prev_mem_low = state.memory_low.clone();
-            let prev_mem_io_led = state.memory_io_led.clone();
-            let prev_mem_io_uart = state.memory_io_uart.clone();
-            let prev_mem_stack = state.memory_stack.clone();
-            let prev_prev_mem_low = state.prev_memory_low.clone();
-            let prev_prev_mem_io_led = state.prev_memory_io_led.clone();
-            let prev_prev_mem_io_uart = state.prev_memory_io_uart.clone();
-            let prev_prev_mem_stack = state.prev_memory_stack.clone();
-            let stop_flag = Rc::clone(&stop_flag.borrow());
-            let switch_state = Rc::clone(&switch_state.borrow());
+            let running_handle = rust_is_running.clone();
+            let state_handle = rust_emu_state.clone();
+            let current_cpu = (*rust_cpu).clone();
+            let stop_handle = Rc::clone(&stop_flag.borrow());
+            let switch_handle = Rc::clone(&switch_state.borrow());
             let uart_handle = uart_q.clone();
-            let uart_clear_flag = uart_clear.clone();
+            let uart_clear_handle = uart_clear.clone();
+            let speed_handle = speed.clone();
 
-            // Run with animation using timer
-            gloo::timers::callback::Timeout::new(50, move || {
-                #[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
-                fn run_step(
-                    mut current_cpu: WasmCpu,
-                    cpu_handle: yew::UseStateHandle<WasmCpu>,
-                    running: yew::UseStateHandle<bool>,
-                    state: yew::UseStateHandle<EmulatorState>,
-                    asm_lines: Vec<String>,
-                    prev_regs: [u32; 8],
-                    prev_prev_regs: [u32; 8],
-                    prev_mem_low: SparseMemory,
-                    prev_mem_io_led: Vec<u8>,
-                    prev_mem_io_uart: Vec<u8>,
-                    prev_mem_stack: SparseMemory,
-                    prev_prev_mem_low: SparseMemory,
-                    prev_prev_mem_io_led: Vec<u8>,
-                    prev_prev_mem_io_uart: Vec<u8>,
-                    prev_prev_mem_stack: SparseMemory,
-                    steps: u32,
-                    stop_flag: Rc<Cell<bool>>,
-                    switch_state: Rc<Cell<u8>>,
-                    uart_handle: Rc<RefCell<VecDeque<u8>>>,
-                    uart_clear_handle: Rc<Cell<bool>>,
-                    cumulative_led_on: u64,
-                ) {
-                    // Check stop flag
-                    if stop_flag.get() {
-                        cpu_handle.set(current_cpu);
-                        running.set(false);
-                        return;
-                    }
-
-                    // Check if UART clear was requested
-                    if uart_clear_handle.get() {
-                        uart_clear_handle.set(false);
-                        current_cpu.clear_uart_output();
-                    }
-
-                    // Sync switch state before execution
-                    current_cpu.set_switches(switch_state.get());
-
-                    // Drain any pending UART input bytes
-                    {
-                        let mut q = uart_handle.borrow_mut();
-                        while let Some(byte) = q.pop_front() {
-                            current_cpu.uart_send_char(byte as char);
-                        }
-                    }
-
-                    // Execute a batch of instructions
-                    let mut halted = false;
-                    let mut batch_led_on: u64 = 0;
-                    for _ in 0..500 {
-                        if current_cpu.is_halted() {
-                            halted = true;
-                            break;
-                        }
-                        if current_cpu.step().is_err() {
-                            halted = true;
-                            break;
-                        }
-                        if current_cpu.get_led_value() & 1 == 1 {
-                            batch_led_on += 1;
-                        }
-                    }
-
-                    // Update state for display
-                    let regs = current_cpu.get_registers();
-                    let mut registers = [0u32; 8];
-                    for (i, &val) in regs.iter().enumerate().take(8) {
-                        registers[i] = val;
-                    }
-                    let memory_low = current_cpu.get_sparse_sram();
-                    let mut memory_io_led = Vec::with_capacity(16);
-                    for addr in 0xFF0000..0xFF0010 {
-                        memory_io_led.push(current_cpu.read_byte(addr));
-                    }
-                    let mut memory_io_uart = Vec::with_capacity(16);
-                    for addr in 0xFF0100..0xFF0110 {
-                        memory_io_uart.push(current_cpu.read_byte(addr));
-                    }
-                    let memory_stack = current_cpu.get_sparse_ebr();
-
-                    // Save current values as prev for next iteration
-                    let next_prev_regs = registers;
-                    let next_prev_prev_regs = prev_regs;
-                    let next_prev_mem_low = memory_low.clone();
-                    let next_prev_mem_io_led = memory_io_led.clone();
-                    let next_prev_mem_io_uart = memory_io_uart.clone();
-                    let next_prev_mem_stack = memory_stack.clone();
-                    let next_prev_prev_mem_low = prev_mem_low.clone();
-                    let next_prev_prev_mem_io_led = prev_mem_io_led.clone();
-                    let next_prev_prev_mem_io_uart = prev_mem_io_uart.clone();
-                    let next_prev_prev_mem_stack = prev_mem_stack.clone();
-
-                    let next_led_on = cumulative_led_on + batch_led_on;
-                    state.set(EmulatorState {
-                        registers,
-                        prev_registers: prev_regs,
-                        prev_prev_registers: prev_prev_regs,
-                        pc: current_cpu.get_pc(),
-                        condition_flag: current_cpu.get_condition_flag(),
-                        is_halted: current_cpu.is_halted(),
-                        led_value: current_cpu.get_led_value(),
-                        led_duty_cycle: {
-                            let total_instr = current_cpu.get_instruction_count() as u64;
-                            if total_instr > 0 { next_led_on as f32 / total_instr as f32 } else { 0.0 }
-                        },
-                        led_on_count: next_led_on,
-                        instruction_count: current_cpu.get_instruction_count(),
-                        memory_low,
-                        memory_io_led,
-                        memory_io_uart,
-                        memory_stack,
-                        program_end: current_cpu.get_program_end(),
-                        prev_memory_low: prev_mem_low,
-                        prev_memory_io_led: prev_mem_io_led,
-                        prev_memory_io_uart: prev_mem_io_uart,
-                        prev_memory_stack: prev_mem_stack,
-                        prev_prev_memory_low: prev_prev_mem_low,
-                        prev_prev_memory_io_led: prev_prev_mem_io_led,
-                        prev_prev_memory_io_uart: prev_prev_mem_io_uart,
-                        prev_prev_memory_stack: prev_prev_mem_stack,
-                        current_instruction: current_cpu.get_current_instruction(),
-                        assembled_lines: asm_lines.clone(),
-                        uart_output: current_cpu.get_uart_output(),
-                        trace_lines: current_cpu.get_trace_lines(100),
-                    });
-
-                    if halted {
-                        // Done - save final CPU state
-                        cpu_handle.set(current_cpu);
-                        running.set(false);
-                    } else {
-                        // Continue running - pass CPU value directly to next iteration
-                        let cpu_handle = cpu_handle.clone();
-                        let running = running.clone();
-                        let state = state.clone();
-                        let asm_lines = asm_lines.clone();
-                        gloo::timers::callback::Timeout::new(30, move || {
-                            run_step(current_cpu, cpu_handle, running, state, asm_lines, next_prev_regs, next_prev_prev_regs, next_prev_mem_low, next_prev_mem_io_led, next_prev_mem_io_uart, next_prev_mem_stack, next_prev_prev_mem_low, next_prev_prev_mem_io_led, next_prev_prev_mem_io_uart, next_prev_prev_mem_stack, steps + 500, stop_flag, switch_state, uart_handle, uart_clear_handle, next_led_on);
-                        }).forget();
-                    }
-                }
-
-                run_step(initial_cpu, cpu_handle, running, state, asm_lines, prev_regs, prev_prev_regs, prev_mem_low, prev_mem_io_led, prev_mem_io_uart, prev_mem_stack, prev_prev_mem_low, prev_prev_mem_io_led, prev_prev_mem_io_uart, prev_prev_mem_stack, 0, stop_flag, switch_state, uart_handle, uart_clear_flag, 0);
+            gloo::timers::callback::Timeout::new(0, move || {
+                run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle);
             }).forget();
         })
     };
@@ -1084,162 +831,26 @@ pub fn app() -> Html {
         let switch_value = c_switch_value.clone();
         let uart_q = c_uart_queue.borrow().clone();
         let uart_clear = c_uart_clear_flag.borrow().clone();
+        let speed = run_speed_ms.borrow().clone();
 
         Callback::from(move |()| {
             stop_flag.borrow().set(false);
             switch_state.borrow().set(*switch_value);
             uart_clear.set(false);
-
             c_is_running.set(true);
+
             let cpu_handle = c_cpu.clone();
-            let running = c_is_running.clone();
-            let state = c_emu_state.clone();
-            let asm_lines = state.assembled_lines.clone();
-            let initial_cpu = (*c_cpu).clone();
-            let prev_regs = state.registers;
-            let prev_prev_regs = state.prev_registers;
-            let prev_mem_low = state.memory_low.clone();
-            let prev_mem_io_led = state.memory_io_led.clone();
-            let prev_mem_io_uart = state.memory_io_uart.clone();
-            let prev_mem_stack = state.memory_stack.clone();
-            let prev_prev_mem_low = state.prev_memory_low.clone();
-            let prev_prev_mem_io_led = state.prev_memory_io_led.clone();
-            let prev_prev_mem_io_uart = state.prev_memory_io_uart.clone();
-            let prev_prev_mem_stack = state.prev_memory_stack.clone();
-            let stop_flag = Rc::clone(&stop_flag.borrow());
-            let switch_state = Rc::clone(&switch_state.borrow());
+            let running_handle = c_is_running.clone();
+            let state_handle = c_emu_state.clone();
+            let current_cpu = (*c_cpu).clone();
+            let stop_handle = Rc::clone(&stop_flag.borrow());
+            let switch_handle = Rc::clone(&switch_state.borrow());
             let uart_handle = uart_q.clone();
-            let uart_clear_flag = uart_clear.clone();
+            let uart_clear_handle = uart_clear.clone();
+            let speed_handle = speed.clone();
 
-            gloo::timers::callback::Timeout::new(50, move || {
-                #[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
-                fn run_step(
-                    mut current_cpu: WasmCpu,
-                    cpu_handle: yew::UseStateHandle<WasmCpu>,
-                    running: yew::UseStateHandle<bool>,
-                    state: yew::UseStateHandle<EmulatorState>,
-                    asm_lines: Vec<String>,
-                    prev_regs: [u32; 8],
-                    prev_prev_regs: [u32; 8],
-                    prev_mem_low: SparseMemory,
-                    prev_mem_io_led: Vec<u8>,
-                    prev_mem_io_uart: Vec<u8>,
-                    prev_mem_stack: SparseMemory,
-                    prev_prev_mem_low: SparseMemory,
-                    prev_prev_mem_io_led: Vec<u8>,
-                    prev_prev_mem_io_uart: Vec<u8>,
-                    prev_prev_mem_stack: SparseMemory,
-                    steps: u32,
-                    stop_flag: Rc<Cell<bool>>,
-                    switch_state: Rc<Cell<u8>>,
-                    uart_handle: Rc<RefCell<VecDeque<u8>>>,
-                    uart_clear_handle: Rc<Cell<bool>>,
-                    cumulative_led_on: u64,
-                ) {
-                    if stop_flag.get() {
-                        cpu_handle.set(current_cpu);
-                        running.set(false);
-                        return;
-                    }
-
-                    if uart_clear_handle.get() {
-                        uart_clear_handle.set(false);
-                        current_cpu.clear_uart_output();
-                    }
-
-                    current_cpu.set_switches(switch_state.get());
-
-                    {
-                        let mut q = uart_handle.borrow_mut();
-                        while let Some(byte) = q.pop_front() {
-                            current_cpu.uart_send_char(byte as char);
-                        }
-                    }
-
-                    let mut halted = false;
-                    let mut batch_led_on: u64 = 0;
-                    for _ in 0..500 {
-                        if current_cpu.is_halted() { halted = true; break; }
-                        if current_cpu.step().is_err() { halted = true; break; }
-                        if current_cpu.get_led_value() & 1 == 1 { batch_led_on += 1; }
-                    }
-
-                    let regs = current_cpu.get_registers();
-                    let mut registers = [0u32; 8];
-                    for (i, &val) in regs.iter().enumerate().take(8) {
-                        registers[i] = val;
-                    }
-                    let memory_low = current_cpu.get_sparse_sram();
-                    let mut memory_io_led = Vec::with_capacity(16);
-                    for addr in 0xFF0000..0xFF0010 {
-                        memory_io_led.push(current_cpu.read_byte(addr));
-                    }
-                    let mut memory_io_uart = Vec::with_capacity(16);
-                    for addr in 0xFF0100..0xFF0110 {
-                        memory_io_uart.push(current_cpu.read_byte(addr));
-                    }
-                    let memory_stack = current_cpu.get_sparse_ebr();
-
-                    let next_prev_regs = registers;
-                    let next_prev_prev_regs = prev_regs;
-                    let next_prev_mem_low = memory_low.clone();
-                    let next_prev_mem_io_led = memory_io_led.clone();
-                    let next_prev_mem_io_uart = memory_io_uart.clone();
-                    let next_prev_mem_stack = memory_stack.clone();
-                    let next_prev_prev_mem_low = prev_mem_low.clone();
-                    let next_prev_prev_mem_io_led = prev_mem_io_led.clone();
-                    let next_prev_prev_mem_io_uart = prev_mem_io_uart.clone();
-                    let next_prev_prev_mem_stack = prev_mem_stack.clone();
-
-                    let next_led_on = cumulative_led_on + batch_led_on;
-                    state.set(EmulatorState {
-                        registers,
-                        prev_registers: prev_regs,
-                        prev_prev_registers: prev_prev_regs,
-                        pc: current_cpu.get_pc(),
-                        condition_flag: current_cpu.get_condition_flag(),
-                        is_halted: current_cpu.is_halted(),
-                        led_value: current_cpu.get_led_value(),
-                        led_duty_cycle: {
-                            let total_instr = current_cpu.get_instruction_count() as u64;
-                            if total_instr > 0 { next_led_on as f32 / total_instr as f32 } else { 0.0 }
-                        },
-                        led_on_count: next_led_on,
-                        instruction_count: current_cpu.get_instruction_count(),
-                        memory_low,
-                        memory_io_led,
-                        memory_io_uart,
-                        memory_stack,
-                        program_end: current_cpu.get_program_end(),
-                        prev_memory_low: prev_mem_low,
-                        prev_memory_io_led: prev_mem_io_led,
-                        prev_memory_io_uart: prev_mem_io_uart,
-                        prev_memory_stack: prev_mem_stack,
-                        prev_prev_memory_low: prev_prev_mem_low,
-                        prev_prev_memory_io_led: prev_prev_mem_io_led,
-                        prev_prev_memory_io_uart: prev_prev_mem_io_uart,
-                        prev_prev_memory_stack: prev_prev_mem_stack,
-                        current_instruction: current_cpu.get_current_instruction(),
-                        assembled_lines: asm_lines.clone(),
-                        uart_output: current_cpu.get_uart_output(),
-                        trace_lines: current_cpu.get_trace_lines(100),
-                    });
-
-                    if halted {
-                        cpu_handle.set(current_cpu);
-                        running.set(false);
-                    } else {
-                        let cpu_handle = cpu_handle.clone();
-                        let running = running.clone();
-                        let state = state.clone();
-                        let asm_lines = asm_lines.clone();
-                        gloo::timers::callback::Timeout::new(30, move || {
-                            run_step(current_cpu, cpu_handle, running, state, asm_lines, next_prev_regs, next_prev_prev_regs, next_prev_mem_low, next_prev_mem_io_led, next_prev_mem_io_uart, next_prev_mem_stack, next_prev_prev_mem_low, next_prev_prev_mem_io_led, next_prev_prev_mem_io_uart, next_prev_prev_mem_stack, steps + 500, stop_flag, switch_state, uart_handle, uart_clear_handle, next_led_on);
-                        }).forget();
-                    }
-                }
-
-                run_step(initial_cpu, cpu_handle, running, state, asm_lines, prev_regs, prev_prev_regs, prev_mem_low, prev_mem_io_led, prev_mem_io_uart, prev_mem_stack, prev_prev_mem_low, prev_prev_mem_io_led, prev_prev_mem_io_uart, prev_prev_mem_stack, 0, stop_flag, switch_state, uart_handle, uart_clear_flag, 0);
+            gloo::timers::callback::Timeout::new(0, move || {
+                run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle);
             }).forget();
         })
     };
@@ -1472,6 +1083,7 @@ pub fn app() -> Html {
                         on_uart_clear={on_asm_uart_clear}
                         listing_scroll_id={"asm-debug-listing-scroll".to_string()}
                         show_listing={false}
+                        run_speed_ms={Some(run_speed_ms.borrow().clone())}
                     />
                 </div>
             </div>
@@ -1494,6 +1106,7 @@ pub fn app() -> Html {
                     on_switch_toggle={on_rust_switch_toggle}
                     on_uart_send={on_rust_uart_send}
                     on_uart_clear={on_rust_uart_clear}
+                    run_speed_ms={Some(run_speed_ms.borrow().clone())}
                     on_tutorial_open={
                         let tutorial_open = tutorial_open.clone();
                         Callback::from(move |_| tutorial_open.set(true))
@@ -1531,6 +1144,7 @@ pub fn app() -> Html {
                     on_switch_toggle={on_c_switch_toggle}
                     on_uart_send={on_c_uart_send}
                     on_uart_clear={on_c_uart_clear}
+                    run_speed_ms={Some(run_speed_ms.borrow().clone())}
                     on_tutorial_open={
                         let tutorial_open = tutorial_open.clone();
                         Callback::from(move |_| tutorial_open.set(true))
@@ -2258,7 +1872,59 @@ jmp     (r1)        ; Return
 </ul>
 "#;
 
-/// Pre-built Rust pipeline examples (Rust → MSP430 → COR24)
+/// Animated run loop: execute one instruction, update full state, yield to browser.
+/// Shared by all three tabs (Assembler, C, Rust).
+#[allow(clippy::too_many_arguments)]
+fn run_one_instruction(
+    mut current_cpu: WasmCpu,
+    cpu_handle: yew::UseStateHandle<WasmCpu>,
+    running_handle: yew::UseStateHandle<bool>,
+    state_handle: yew::UseStateHandle<EmulatorState>,
+    stop_handle: Rc<Cell<bool>>,
+    switch_handle: Rc<Cell<u8>>,
+    uart_handle: Rc<RefCell<VecDeque<u8>>>,
+    uart_clear_handle: Rc<Cell<bool>>,
+    speed_handle: Rc<Cell<u32>>,
+) {
+    if stop_handle.get() {
+        state_handle.set(capture_cpu_state(&current_cpu, &state_handle));
+        cpu_handle.set(current_cpu);
+        running_handle.set(false);
+        return;
+    }
+    if uart_clear_handle.get() {
+        uart_clear_handle.set(false);
+        current_cpu.clear_uart_output();
+    }
+    current_cpu.set_switches(switch_handle.get());
+    {
+        let mut q = uart_handle.borrow_mut();
+        while let Some(byte) = q.pop_front() {
+            current_cpu.uart_send_char(byte as char);
+        }
+    }
+
+    // Execute ONE instruction
+    let halted = if current_cpu.is_halted() {
+        true
+    } else {
+        current_cpu.step().is_err() || current_cpu.is_halted()
+    };
+
+    // Update full state every instruction (educational visualization)
+    state_handle.set(capture_cpu_state(&current_cpu, &state_handle));
+    cpu_handle.set(current_cpu.clone());
+
+    if halted {
+        running_handle.set(false);
+    } else {
+        let delay = speed_handle.get();
+        gloo::timers::callback::Timeout::new(delay, move || {
+            run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle);
+        }).forget();
+    }
+}
+
 /// Capture current CPU state into an EmulatorState, preserving previous state for heatmap
 fn capture_cpu_state(cpu: &WasmCpu, prev: &EmulatorState) -> EmulatorState {
     let regs = cpu.get_registers();
