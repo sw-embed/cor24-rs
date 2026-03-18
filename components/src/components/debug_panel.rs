@@ -235,11 +235,9 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                         oninput={{
                             let speed_rc = speed_rc.clone();
                             Callback::from(move |e: InputEvent| {
-                                if let Some(input) = e.target_dyn_into::<web_sys::HtmlInputElement>() {
-                                    if let Ok(v) = input.value().parse::<u32>() {
-                                        // Slider goes 1-200, map to delay: 200-1ms
+                                if let Some(input) = e.target_dyn_into::<web_sys::HtmlInputElement>()
+                                    && let Ok(v) = input.value().parse::<u32>() {
                                         speed_rc.set(201 - v);
-                                    }
                                 }
                             })
                         }}

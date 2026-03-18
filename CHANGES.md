@@ -36,6 +36,10 @@
 - Rewrite Rust fibonacci_iter demo using @cor24 passthrough — 16 instructions
   with zero spills (was ~35 with 14 spill ops per loop iteration)
 - Add translator optimization design doc (docs/translator-optimization.md)
+- Per-instruction run loop with speed slider (1ms-200ms per instruction)
+  replaces 500-batch loop that froze the browser on slower machines
+- Extract shared run_one_instruction(), eliminating ~300 lines of
+  duplicated run loop code across the three tabs
 
 ## 2026-03-15
 
