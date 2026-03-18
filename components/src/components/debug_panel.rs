@@ -74,30 +74,27 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
     // Mirror of Rc<Cell> speed for display re-rendering
     let speed_display = use_state(|| props.run_speed_ms.as_ref().map_or(10, |rc| rc.get()));
 
-    // Auto-scroll listing container (only) to keep current instruction visible.
-    // Scrolls the listing-scroll div, NOT the page or notebook.
+    // Auto-scroll listing container to keep current PC visible.
+    // Each asm line has id="asm-{ADDR:04X}". Scroll container to that element.
     {
         let pc = state.pc;
-        let instruction_count = state.instruction_count;
         let scroll_id = props.listing_scroll_id.clone().unwrap_or_else(|| "debug-asm-listing-scroll".to_string());
-        use_effect_with((pc, instruction_count), move |_| {
-            gloo::timers::callback::Timeout::new(0, move || {
-                if let Some(window) = web_sys::window()
-                    && let Some(document) = window.document()
-                    && let Some(container) = document.get_element_by_id(&scroll_id)
-                    && let Some(element) = container.query_selector(".asm-line.current-line").ok().flatten()
-                {
-                    let el: &web_sys::HtmlElement = element.unchecked_ref();
-                    let ct: &web_sys::HtmlElement = container.unchecked_ref();
-                    let el_top = el.offset_top();
-                    let ct_height = ct.client_height();
-                    let ct_scroll = container.scroll_top();
-                    // Only scroll if current line is outside the visible area
-                    if el_top < ct_scroll || el_top > ct_scroll + ct_height - 20 {
-                        container.set_scroll_top(el_top - ct_height / 3);
-                    }
+        use_effect_with(pc, move |&pc| {
+            let target_id = format!("asm-{:04X}", pc);
+            if let Some(window) = web_sys::window()
+                && let Some(document) = window.document()
+                && let Some(container) = document.get_element_by_id(&scroll_id)
+                && let Some(element) = document.get_element_by_id(&target_id)
+            {
+                let el: &web_sys::HtmlElement = element.unchecked_ref();
+                let ct: &web_sys::HtmlElement = container.unchecked_ref();
+                let el_top = el.offset_top();
+                let ct_height = ct.client_height();
+                let ct_scroll = container.scroll_top();
+                if el_top < ct_scroll || el_top > ct_scroll + ct_height - 20 {
+                    container.set_scroll_top(el_top - ct_height / 3);
                 }
-            }).forget();
+            }
         });
     }
 
@@ -269,18 +266,16 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                         if props.is_loaded && !state.assembled_lines.is_empty() {
                             <div class="listing-scroll" id={scroll_id}>
                                 {for state.assembled_lines.iter().map(|line| {
-                                    let is_current = if line.len() > 4 && line.chars().nth(4) == Some(':') {
-                                        if let Ok(addr) = u32::from_str_radix(&line[0..4], 16) {
-                                            addr == state.pc
-                                        } else {
-                                            false
-                                        }
+                                    let addr = if line.len() > 4 && line.chars().nth(4) == Some(':') {
+                                        u32::from_str_radix(&line[0..4], 16).ok()
                                     } else {
-                                        false
+                                        None
                                     };
+                                    let is_current = addr.map_or(false, |a| a == state.pc);
                                     let class = if is_current { "asm-line current-line" } else { "asm-line" };
+                                    let id = addr.map(|a| format!("asm-{:04X}", a));
                                     html! {
-                                        <div class={class}>{line}</div>
+                                        <div class={class} id={id}>{line}</div>
                                     }
                                 })}
                             </div>
