@@ -236,37 +236,12 @@ pub fn app() -> Html {
         })
     };
 
-    let on_run = {
-        let cpu = cpu.clone();
-        let asm_is_running = asm_is_running.clone();
-        let asm_emu_state = asm_emu_state.clone();
-        let stop_flag = asm_stop_requested.borrow().clone();
-        let switches = shared_switches.borrow().clone();
-        let uart_q = asm_uart_queue.borrow().clone();
-        let uart_clear = asm_uart_clear_flag.borrow().clone();
-        let speed = run_speed_ms.borrow().clone();
-
-        Callback::from(move |()| {
-            asm_is_running.set(true);
-            stop_flag.set(false);
-            uart_clear.set(false);
-            switches.set((*cpu).get_switches());
-
-            let cpu_handle = cpu.clone();
-            let running_handle = asm_is_running.clone();
-            let state_handle = asm_emu_state.clone();
-            let current_cpu = (*cpu).clone();
-            let stop_handle = stop_flag.clone();
-            let switch_handle = switches.clone();
-            let uart_handle = uart_q.clone();
-            let uart_clear_handle = uart_clear.clone();
-            let speed_handle = speed.clone();
-
-            gloo::timers::callback::Timeout::new(0, move || {
-                run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle);
-            }).forget();
-        })
-    };
+    let on_run = make_run_callback(
+        cpu.clone(), asm_is_running.clone(), asm_emu_state.clone(),
+        asm_stop_requested.borrow().clone(), shared_switches.borrow().clone(),
+        asm_uart_queue.borrow().clone(), asm_uart_clear_flag.borrow().clone(),
+        run_speed_ms.borrow().clone(),
+    );
 
     let on_stop = {
         let stop_flag = asm_stop_requested.borrow().clone();
@@ -382,108 +357,15 @@ pub fn app() -> Html {
     };
 
     // Rust pipeline: Step N instructions
-    let on_rust_step = {
-        let rust_cpu = rust_cpu.clone();
-        let rust_emu_state = rust_emu_state.clone();
-
-        Callback::from(move |count: u32| {
-            let mut new_cpu = (*rust_cpu).clone();
-            let prev_state = (*rust_emu_state).clone();
-
-            // Execute up to `count` steps, stopping early on halt/error
-            for _ in 0..count {
-                if new_cpu.is_halted() {
-                    break;
-                }
-                if new_cpu.step().is_err() {
-                    break;
-                }
-            }
-
-            {
-                let regs = new_cpu.get_registers();
-                let mut registers = [0u32; 8];
-                for (i, &val) in regs.iter().enumerate().take(8) {
-                    registers[i] = val;
-                }
-                let memory_low = new_cpu.get_sparse_sram();
-                let mut memory_io_led = Vec::with_capacity(16);
-                for addr in 0xFF0000..0xFF0010 {
-                    memory_io_led.push(new_cpu.read_byte(addr));
-                }
-                let mut memory_io_uart = Vec::with_capacity(16);
-                for addr in 0xFF0100..0xFF0110 {
-                    memory_io_uart.push(new_cpu.read_byte(addr));
-                }
-                let memory_stack = new_cpu.get_sparse_ebr();
-
-                rust_emu_state.set(EmulatorState {
-                    registers,
-                    prev_registers: prev_state.registers,
-                    prev_prev_registers: prev_state.prev_registers,
-                    pc: new_cpu.get_pc(),
-                    condition_flag: new_cpu.get_condition_flag(),
-                    is_halted: new_cpu.is_halted(),
-                    led_value: new_cpu.get_led_value(),
-                    led_duty_cycle: if (new_cpu.get_led_value() & 1) == 1 { 1.0 } else { 0.0 },
-                    led_on_count: 0,
-                    instruction_count: new_cpu.get_instruction_count(),
-                    memory_low,
-                    memory_io_led,
-                    memory_io_uart,
-                    memory_stack,
-                    program_end: new_cpu.get_program_end(),
-                    prev_memory_low: prev_state.memory_low,
-                    prev_memory_io_led: prev_state.memory_io_led,
-                    prev_memory_io_uart: prev_state.memory_io_uart,
-                    prev_memory_stack: prev_state.memory_stack,
-                    prev_prev_memory_low: prev_state.prev_memory_low,
-                    prev_prev_memory_io_led: prev_state.prev_memory_io_led,
-                    prev_prev_memory_io_uart: prev_state.prev_memory_io_uart,
-                    prev_prev_memory_stack: prev_state.prev_memory_stack,
-                    current_instruction: new_cpu.get_current_instruction(),
-                    assembled_lines: prev_state.assembled_lines,
-                    uart_output: new_cpu.get_uart_output(),
-                    trace_lines: new_cpu.get_trace_lines(100),
-                });
-                rust_cpu.set(new_cpu);
-            }
-        })
-    };
+    let on_rust_step = make_step_callback(rust_cpu.clone(), rust_emu_state.clone());
 
     // Rust pipeline: Run with stop button and switch support
-    let on_rust_run = {
-        let rust_cpu = rust_cpu.clone();
-        let rust_is_running = rust_is_running.clone();
-        let rust_emu_state = rust_emu_state.clone();
-        let stop_flag = rust_stop_requested.clone();
-        let switch_state = rust_shared_switches.clone();
-        let switch_value = rust_switch_value.clone();
-        let uart_q = rust_uart_queue.borrow().clone();
-        let uart_clear = rust_uart_clear_flag.borrow().clone();
-        let speed = run_speed_ms.borrow().clone();
-
-        Callback::from(move |()| {
-            stop_flag.borrow().set(false);
-            switch_state.borrow().set(*switch_value);
-            uart_clear.set(false);
-            rust_is_running.set(true);
-
-            let cpu_handle = rust_cpu.clone();
-            let running_handle = rust_is_running.clone();
-            let state_handle = rust_emu_state.clone();
-            let current_cpu = (*rust_cpu).clone();
-            let stop_handle = Rc::clone(&stop_flag.borrow());
-            let switch_handle = Rc::clone(&switch_state.borrow());
-            let uart_handle = uart_q.clone();
-            let uart_clear_handle = uart_clear.clone();
-            let speed_handle = speed.clone();
-
-            gloo::timers::callback::Timeout::new(0, move || {
-                run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle);
-            }).forget();
-        })
-    };
+    let on_rust_run = make_run_callback(
+        rust_cpu.clone(), rust_is_running.clone(), rust_emu_state.clone(),
+        rust_stop_requested.borrow().clone(), rust_shared_switches.borrow().clone(),
+        rust_uart_queue.borrow().clone(), rust_uart_clear_flag.borrow().clone(),
+        run_speed_ms.borrow().clone(),
+    );
 
     // Rust pipeline: Stop execution
     let on_rust_stop = {
@@ -494,42 +376,15 @@ pub fn app() -> Html {
     };
 
     // Rust pipeline: Toggle switch
-    let on_rust_switch_toggle = {
-        let rust_switch_value = rust_switch_value.clone();
-        let rust_cpu = rust_cpu.clone();
-        let switch_state = rust_shared_switches.clone();
-        Callback::from(move |new_value: u8| {
-            rust_switch_value.set(new_value);
-            // Update shared state for run loop
-            switch_state.borrow().set(new_value);
-            // Also update CPU directly for step mode
-            let mut cpu = (*rust_cpu).clone();
-            cpu.set_switches(new_value);
-            rust_cpu.set(cpu);
-        })
-    };
+    let on_rust_switch_toggle = make_switch_callback(
+        rust_switch_value.clone(), rust_cpu.clone(), rust_shared_switches.borrow().clone(),
+    );
 
     // Rust pipeline: UART send
-    let on_rust_uart_send = {
-        let rust_cpu = rust_cpu.clone();
-        let rust_emu_state = rust_emu_state.clone();
-        let rust_is_running = rust_is_running.clone();
-        let uart_q = rust_uart_queue.borrow().clone();
-        Callback::from(move |byte: u8| {
-            if *rust_is_running {
-                // During animated run, push to shared queue — run loop drains it
-                uart_q.borrow_mut().push_back(byte);
-            } else {
-                // Not running — inject directly and step the CPU
-                let mut cpu = (*rust_cpu).clone();
-                cpu.uart_send_char(byte as char);
-                let _ = cpu.run();
-                let state = capture_cpu_state(&cpu, &rust_emu_state);
-                rust_emu_state.set(state);
-                rust_cpu.set(cpu);
-            }
-        })
-    };
+    let on_rust_uart_send = make_uart_send_callback(
+        rust_cpu.clone(), rust_emu_state.clone(), rust_is_running.clone(),
+        rust_uart_queue.borrow().clone(),
+    );
 
     // Rust pipeline: Reset
     let on_rust_reset = {
@@ -614,79 +469,22 @@ pub fn app() -> Html {
     let c_examples = crate::c_examples::get_c_examples();
 
     // Assembler switch toggle callback
-    let on_asm_switch_toggle = {
-        let asm_switch_value = asm_switch_value.clone();
-        let cpu = cpu.clone();
-        let switch_state = shared_switches.clone();
-        Callback::from(move |new_value: u8| {
-            asm_switch_value.set(new_value);
-            switch_state.borrow().set(new_value);
-            let mut new_cpu = (*cpu).clone();
-            new_cpu.set_switches(new_value);
-            cpu.set(new_cpu);
-        })
-    };
+    let on_asm_switch_toggle = make_switch_callback(
+        asm_switch_value.clone(), cpu.clone(), shared_switches.borrow().clone(),
+    );
 
-    // Assembler UART send callback
-    let on_asm_uart_send = {
-        let cpu = cpu.clone();
-        let asm_emu_state = asm_emu_state.clone();
-        let asm_is_running = asm_is_running.clone();
-        let uart_q = asm_uart_queue.borrow().clone();
-        Callback::from(move |byte: u8| {
-            if *asm_is_running {
-                // During animated run, push to shared queue — run loop drains it
-                uart_q.borrow_mut().push_back(byte);
-            } else {
-                // Not running — inject directly and step the CPU
-                let mut new_cpu = (*cpu).clone();
-                new_cpu.uart_send_char(byte as char);
-                let _ = new_cpu.run();
-                let state = capture_cpu_state(&new_cpu, &asm_emu_state);
-                asm_emu_state.set(state);
-                cpu.set(new_cpu);
-            }
-        })
-    };
-
-    // Assembler UART clear callback
-    let on_asm_uart_clear = {
-        let cpu = cpu.clone();
-        let asm_emu_state = asm_emu_state.clone();
-        let asm_is_running = asm_is_running.clone();
-        let clear_flag = asm_uart_clear_flag.borrow().clone();
-        Callback::from(move |()| {
-            if *asm_is_running {
-                // During animated run, signal the run loop to clear
-                clear_flag.set(true);
-            } else {
-                let mut new_cpu = (*cpu).clone();
-                new_cpu.clear_uart_output();
-                let state = capture_cpu_state(&new_cpu, &asm_emu_state);
-                asm_emu_state.set(state);
-                cpu.set(new_cpu);
-            }
-        })
-    };
-
-    // Rust pipeline UART clear callback
-    let on_rust_uart_clear = {
-        let rust_cpu = rust_cpu.clone();
-        let rust_emu_state = rust_emu_state.clone();
-        let rust_is_running = rust_is_running.clone();
-        let clear_flag = rust_uart_clear_flag.borrow().clone();
-        Callback::from(move |()| {
-            if *rust_is_running {
-                clear_flag.set(true);
-            } else {
-                let mut cpu = (*rust_cpu).clone();
-                cpu.clear_uart_output();
-                let state = capture_cpu_state(&cpu, &rust_emu_state);
-                rust_emu_state.set(state);
-                rust_cpu.set(cpu);
-            }
-        })
-    };
+    let on_asm_uart_send = make_uart_send_callback(
+        cpu.clone(), asm_emu_state.clone(), asm_is_running.clone(),
+        asm_uart_queue.borrow().clone(),
+    );
+    let on_asm_uart_clear = make_uart_clear_callback(
+        cpu.clone(), asm_emu_state.clone(), asm_is_running.clone(),
+        asm_uart_clear_flag.borrow().clone(),
+    );
+    let on_rust_uart_clear = make_uart_clear_callback(
+        rust_cpu.clone(), rust_emu_state.clone(), rust_is_running.clone(),
+        rust_uart_clear_flag.borrow().clone(),
+    );
 
     // C pipeline: Load example
     let on_c_load = {
@@ -758,102 +556,14 @@ pub fn app() -> Html {
         })
     };
 
-    // C pipeline: Step N instructions
-    let on_c_step = {
-        let c_cpu = c_cpu.clone();
-        let c_emu_state = c_emu_state.clone();
+    let on_c_step = make_step_callback(c_cpu.clone(), c_emu_state.clone());
 
-        Callback::from(move |count: u32| {
-            let mut new_cpu = (*c_cpu).clone();
-            let prev_state = (*c_emu_state).clone();
-
-            for _ in 0..count {
-                if new_cpu.is_halted() { break; }
-                if new_cpu.step().is_err() { break; }
-            }
-
-            let regs = new_cpu.get_registers();
-            let mut registers = [0u32; 8];
-            for (i, &val) in regs.iter().enumerate().take(8) {
-                registers[i] = val;
-            }
-            let memory_low = new_cpu.get_sparse_sram();
-            let mut memory_io_led = Vec::with_capacity(16);
-            for addr in 0xFF0000..0xFF0010 {
-                memory_io_led.push(new_cpu.read_byte(addr));
-            }
-            let mut memory_io_uart = Vec::with_capacity(16);
-            for addr in 0xFF0100..0xFF0110 {
-                memory_io_uart.push(new_cpu.read_byte(addr));
-            }
-            let memory_stack = new_cpu.get_sparse_ebr();
-
-            c_emu_state.set(EmulatorState {
-                registers,
-                prev_registers: prev_state.registers,
-                prev_prev_registers: prev_state.prev_registers,
-                pc: new_cpu.get_pc(),
-                condition_flag: new_cpu.get_condition_flag(),
-                is_halted: new_cpu.is_halted(),
-                led_value: new_cpu.get_led_value(),
-                led_duty_cycle: if (new_cpu.get_led_value() & 1) == 1 { 1.0 } else { 0.0 },
-                led_on_count: 0,
-                instruction_count: new_cpu.get_instruction_count(),
-                memory_low,
-                memory_io_led,
-                memory_io_uart,
-                memory_stack,
-                program_end: new_cpu.get_program_end(),
-                prev_memory_low: prev_state.memory_low,
-                prev_memory_io_led: prev_state.memory_io_led,
-                prev_memory_io_uart: prev_state.memory_io_uart,
-                prev_memory_stack: prev_state.memory_stack,
-                prev_prev_memory_low: prev_state.prev_memory_low,
-                prev_prev_memory_io_led: prev_state.prev_memory_io_led,
-                prev_prev_memory_io_uart: prev_state.prev_memory_io_uart,
-                prev_prev_memory_stack: prev_state.prev_memory_stack,
-                current_instruction: new_cpu.get_current_instruction(),
-                assembled_lines: prev_state.assembled_lines,
-                uart_output: new_cpu.get_uart_output(),
-                trace_lines: new_cpu.get_trace_lines(100),
-            });
-            c_cpu.set(new_cpu);
-        })
-    };
-
-    // C pipeline: Run with animation
-    let on_c_run = {
-        let c_cpu = c_cpu.clone();
-        let c_is_running = c_is_running.clone();
-        let c_emu_state = c_emu_state.clone();
-        let stop_flag = c_stop_requested.clone();
-        let switch_state = c_shared_switches.clone();
-        let switch_value = c_switch_value.clone();
-        let uart_q = c_uart_queue.borrow().clone();
-        let uart_clear = c_uart_clear_flag.borrow().clone();
-        let speed = run_speed_ms.borrow().clone();
-
-        Callback::from(move |()| {
-            stop_flag.borrow().set(false);
-            switch_state.borrow().set(*switch_value);
-            uart_clear.set(false);
-            c_is_running.set(true);
-
-            let cpu_handle = c_cpu.clone();
-            let running_handle = c_is_running.clone();
-            let state_handle = c_emu_state.clone();
-            let current_cpu = (*c_cpu).clone();
-            let stop_handle = Rc::clone(&stop_flag.borrow());
-            let switch_handle = Rc::clone(&switch_state.borrow());
-            let uart_handle = uart_q.clone();
-            let uart_clear_handle = uart_clear.clone();
-            let speed_handle = speed.clone();
-
-            gloo::timers::callback::Timeout::new(0, move || {
-                run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle);
-            }).forget();
-        })
-    };
+    let on_c_run = make_run_callback(
+        c_cpu.clone(), c_is_running.clone(), c_emu_state.clone(),
+        c_stop_requested.borrow().clone(), c_shared_switches.borrow().clone(),
+        c_uart_queue.borrow().clone(), c_uart_clear_flag.borrow().clone(),
+        run_speed_ms.borrow().clone(),
+    );
 
     // C pipeline: Stop execution
     let on_c_stop = {
@@ -864,57 +574,17 @@ pub fn app() -> Html {
     };
 
     // C pipeline: Toggle switch
-    let on_c_switch_toggle = {
-        let c_switch_value = c_switch_value.clone();
-        let c_cpu = c_cpu.clone();
-        let switch_state = c_shared_switches.clone();
-        Callback::from(move |new_value: u8| {
-            c_switch_value.set(new_value);
-            switch_state.borrow().set(new_value);
-            let mut cpu = (*c_cpu).clone();
-            cpu.set_switches(new_value);
-            c_cpu.set(cpu);
-        })
-    };
-
-    // C pipeline: UART send
-    let on_c_uart_send = {
-        let c_cpu = c_cpu.clone();
-        let c_emu_state = c_emu_state.clone();
-        let c_is_running = c_is_running.clone();
-        let uart_q = c_uart_queue.borrow().clone();
-        Callback::from(move |byte: u8| {
-            if *c_is_running {
-                uart_q.borrow_mut().push_back(byte);
-            } else {
-                let mut cpu = (*c_cpu).clone();
-                cpu.uart_send_char(byte as char);
-                let _ = cpu.run();
-                let state = capture_cpu_state(&cpu, &c_emu_state);
-                c_emu_state.set(state);
-                c_cpu.set(cpu);
-            }
-        })
-    };
-
-    // C pipeline: UART clear
-    let on_c_uart_clear = {
-        let c_cpu = c_cpu.clone();
-        let c_emu_state = c_emu_state.clone();
-        let c_is_running = c_is_running.clone();
-        let clear_flag = c_uart_clear_flag.borrow().clone();
-        Callback::from(move |()| {
-            if *c_is_running {
-                clear_flag.set(true);
-            } else {
-                let mut cpu = (*c_cpu).clone();
-                cpu.clear_uart_output();
-                let state = capture_cpu_state(&cpu, &c_emu_state);
-                c_emu_state.set(state);
-                c_cpu.set(cpu);
-            }
-        })
-    };
+    let on_c_switch_toggle = make_switch_callback(
+        c_switch_value.clone(), c_cpu.clone(), c_shared_switches.borrow().clone(),
+    );
+    let on_c_uart_send = make_uart_send_callback(
+        c_cpu.clone(), c_emu_state.clone(), c_is_running.clone(),
+        c_uart_queue.borrow().clone(),
+    );
+    let on_c_uart_clear = make_uart_clear_callback(
+        c_cpu.clone(), c_emu_state.clone(), c_is_running.clone(),
+        c_uart_clear_flag.borrow().clone(),
+    );
 
     // C pipeline: Reset
     let on_c_reset = {
@@ -1923,6 +1593,111 @@ fn run_one_instruction(
             run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle, stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle);
         }).forget();
     }
+}
+
+/// Create a step callback for any tab
+fn make_step_callback(
+    cpu: yew::UseStateHandle<WasmCpu>,
+    emu_state: yew::UseStateHandle<EmulatorState>,
+) -> Callback<u32> {
+    Callback::from(move |count: u32| {
+        let mut new_cpu = (*cpu).clone();
+        for _ in 0..count {
+            if new_cpu.is_halted() { break; }
+            if new_cpu.step().is_err() { break; }
+        }
+        emu_state.set(capture_cpu_state(&new_cpu, &emu_state));
+        cpu.set(new_cpu);
+    })
+}
+
+/// Create a run callback for any tab
+#[allow(clippy::too_many_arguments)]
+fn make_run_callback(
+    cpu: yew::UseStateHandle<WasmCpu>,
+    is_running: yew::UseStateHandle<bool>,
+    emu_state: yew::UseStateHandle<EmulatorState>,
+    stop_flag: Rc<Cell<bool>>,
+    switches: Rc<Cell<u8>>,
+    uart_queue: Rc<RefCell<VecDeque<u8>>>,
+    uart_clear: Rc<Cell<bool>>,
+    speed: Rc<Cell<u32>>,
+) -> Callback<()> {
+    Callback::from(move |()| {
+        is_running.set(true);
+        stop_flag.set(false);
+        uart_clear.set(false);
+        switches.set((*cpu).get_switches());
+
+        let cpu_handle = cpu.clone();
+        let running_handle = is_running.clone();
+        let state_handle = emu_state.clone();
+        let current_cpu = (*cpu).clone();
+        let stop_handle = stop_flag.clone();
+        let switch_handle = switches.clone();
+        let uart_handle = uart_queue.clone();
+        let uart_clear_handle = uart_clear.clone();
+        let speed_handle = speed.clone();
+
+        gloo::timers::callback::Timeout::new(0, move || {
+            run_one_instruction(current_cpu, cpu_handle, running_handle, state_handle,
+                stop_handle, switch_handle, uart_handle, uart_clear_handle, speed_handle);
+        }).forget();
+    })
+}
+
+/// Create a switch toggle callback for any tab
+fn make_switch_callback(
+    switch_value: yew::UseStateHandle<u8>,
+    cpu: yew::UseStateHandle<WasmCpu>,
+    shared_switches: Rc<Cell<u8>>,
+) -> Callback<u8> {
+    Callback::from(move |new_value: u8| {
+        switch_value.set(new_value);
+        shared_switches.set(new_value);
+        let mut new_cpu = (*cpu).clone();
+        new_cpu.set_switches(new_value);
+        cpu.set(new_cpu);
+    })
+}
+
+/// Create a UART send callback for any tab
+fn make_uart_send_callback(
+    cpu: yew::UseStateHandle<WasmCpu>,
+    emu_state: yew::UseStateHandle<EmulatorState>,
+    is_running: yew::UseStateHandle<bool>,
+    uart_queue: Rc<RefCell<VecDeque<u8>>>,
+) -> Callback<u8> {
+    Callback::from(move |byte: u8| {
+        if *is_running {
+            uart_queue.borrow_mut().push_back(byte);
+        } else {
+            let mut new_cpu = (*cpu).clone();
+            new_cpu.uart_send_char(byte as char);
+            let _ = new_cpu.run();
+            emu_state.set(capture_cpu_state(&new_cpu, &emu_state));
+            cpu.set(new_cpu);
+        }
+    })
+}
+
+/// Create a UART clear callback for any tab
+fn make_uart_clear_callback(
+    cpu: yew::UseStateHandle<WasmCpu>,
+    emu_state: yew::UseStateHandle<EmulatorState>,
+    is_running: yew::UseStateHandle<bool>,
+    uart_clear_flag: Rc<Cell<bool>>,
+) -> Callback<()> {
+    Callback::from(move |()| {
+        if *is_running {
+            uart_clear_flag.set(true);
+        } else {
+            let mut new_cpu = (*cpu).clone();
+            new_cpu.clear_uart_output();
+            emu_state.set(capture_cpu_state(&new_cpu, &emu_state));
+            cpu.set(new_cpu);
+        }
+    })
 }
 
 /// Capture current CPU state into an EmulatorState, preserving previous state for heatmap
