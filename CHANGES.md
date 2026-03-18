@@ -2,9 +2,10 @@
 
 ## 2026-03-18
 
-- Self-test mode: ?selftest runs all 15 examples, ?selftestbad injects failure
-  Formatted panel with green/red per-test rows, expected/actual on failure
-- Self-test detail format: "label: expected X, actual Y" for failures
+- Self-test mode: ?selftest runs all 15 examples, ?selftestbad uses wrong
+  expected values for every test to verify the test system itself
+- Self-test panel: green/red per-test rows, "expected X, actual Y" on failure
+- Stop running emulator on example load and tab switch (was continuing)
 - Fix stale EXAMPLE_PROGRAM: replace hardcoded copy with include_str!
 - Fix Rust Button Echo: add XOR inversion for S2 active-low switch
 - LED duty cycle tooltip restored (accumulates via run loop parameter)
