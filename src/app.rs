@@ -298,7 +298,20 @@ pub fn app() -> Html {
     // Tab change callback
     let on_tab_change = {
         let active_tab = active_tab.clone();
+        let asm_stop = asm_stop_requested.borrow().clone();
+        let rust_stop = rust_stop_requested.borrow().clone();
+        let c_stop = c_stop_requested.borrow().clone();
+        let asm_running = asm_is_running.clone();
+        let rust_running = rust_is_running.clone();
+        let c_running = c_is_running.clone();
         Callback::from(move |tab: String| {
+            // Stop all running emulators when switching tabs
+            asm_stop.set(true);
+            rust_stop.set(true);
+            c_stop.set(true);
+            asm_running.set(false);
+            rust_running.set(false);
+            c_running.set(false);
             active_tab.set(tab);
         })
     };
@@ -308,11 +321,16 @@ pub fn app() -> Html {
         let rust_cpu = rust_cpu.clone();
         let rust_emu_state = rust_emu_state.clone();
         let rust_is_loaded = rust_is_loaded.clone();
+        let rust_is_running = rust_is_running.clone();
         let rust_loaded_example = rust_loaded_example.clone();
         let rust_load_gen = rust_load_gen.clone();
         let rust_load_counter = rust_load_counter.borrow().clone();
+        let stop_flag = rust_stop_requested.borrow().clone();
 
         Callback::from(move |example: RustExample| {
+            // Stop any running execution
+            stop_flag.set(true);
+            rust_is_running.set(false);
             let new_gen = rust_load_counter.get() + 1;
             rust_load_counter.set(new_gen);
             rust_load_gen.set(new_gen);
@@ -511,11 +529,15 @@ pub fn app() -> Html {
         let c_cpu = c_cpu.clone();
         let c_emu_state = c_emu_state.clone();
         let c_is_loaded = c_is_loaded.clone();
+        let c_is_running = c_is_running.clone();
         let c_loaded_example = c_loaded_example.clone();
         let c_load_gen = c_load_gen.clone();
         let c_load_counter = c_load_counter.borrow().clone();
+        let stop_flag = c_stop_requested.borrow().clone();
 
         Callback::from(move |example: CExample| {
+            stop_flag.set(true);
+            c_is_running.set(false);
             let new_gen = c_load_counter.get() + 1;
             c_load_counter.set(new_gen);
             c_load_gen.set(new_gen);
