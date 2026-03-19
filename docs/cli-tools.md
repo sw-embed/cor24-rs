@@ -1,0 +1,159 @@
+# COR24 CLI Tools
+
+## Overview
+
+The COR24 toolchain consists of three CLI tools and a web UI. All tools
+are written in Rust and share the same assembler and emulator core.
+
+```
+Rust source (.rs)
+    ↓ rustc --target msp430-none-elf --emit asm
+MSP430 assembly (.msp430.s)
+    ↓ msp430-to-cor24 (translator)
+COR24 assembly (.cor24.s)
+    ↓ assembler (built into cor24-run / Web UI)
+Machine code (bytes in memory)
+    ↓ emulator
+Execution + final state
+```
+
+## cor24-run — Batch runner
+
+Assembles a `.s` file and runs it in the emulator. No intermediate files
+are produced — the assembler outputs bytes directly into emulator memory.
+
+```bash
+# Assemble and run, dump final state
+cor24-run --run fibonacci.s --dump
+
+# With instruction trace (last 50 instructions)
+cor24-run --run fibonacci.s --dump --trace 50
+
+# With UART input (for interactive programs like Echo)
+cor24-run --run echo.s --uart-input 'abc!' --dump
+
+# Timed execution with speed limit
+cor24-run --run blink_led.s --speed 100000 --time 5
+
+# Step mode: print each instruction as it executes
+cor24-run --run fibonacci.s --step
+
+# Run a demo with animated speed
+cor24-run --demo --speed 100000 --time 10
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--run <file.s>` | Assemble and run a COR24 assembly file |
+| `--dump` | Dump CPU state, I/O, and non-zero memory after halt |
+| `--trace <N>` | Show last N instructions on halt/timeout (default: 50) |
+| `--step` | Print each instruction as it executes |
+| `--speed <N>` | Instructions per second (0 = unlimited) |
+| `--time <secs>` | Time limit in seconds |
+| `--max-instructions <N>` | Stop after N instructions (-1 = no limit) |
+| `--uart-input <str>` | Send characters to UART RX (supports \n, \x21) |
+| `--entry <label>` | Set entry point to label address |
+
+## cor24-dbg — Interactive debugger
+
+GDB-like command-line debugger with breakpoints, memory inspection,
+and UART I/O. Loads `.lgo` files (Luther Johnson's "load and go" format).
+
+```bash
+cor24-dbg program.lgo
+cor24-dbg --entry 0x93 program.lgo
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `r, run [N]` | Run N instructions (default 100M) |
+| `s, step [N]` | Single step N instructions |
+| `n, next` | Step over (skip jal calls) |
+| `c, continue` | Continue from breakpoint |
+| `b, break <addr>` | Set breakpoint |
+| `d, delete <N\|all>` | Delete breakpoint(s) |
+| `i, info [r\|b\|t]` | Show registers, breakpoints, or trace |
+| `t, trace [N]` | Show last N traced instructions |
+| `x [/N] <addr>` | Examine N bytes at address |
+| `p, print <reg\|addr>` | Print register or memory |
+| `disas [addr] [N]` | Disassemble N instructions |
+| `uart` | Show UART output buffer |
+| `uart send <val>` | Send byte to UART RX |
+| `led` | Show LED/button state |
+| `button [press\|release]` | Control button S2 |
+| `reset` | Reset CPU |
+| `q, quit` | Exit |
+
+## msp430-to-cor24 — Translator
+
+Translates MSP430 assembly (from `rustc`) to COR24 assembly. This is
+a source-to-source translator (`.msp430.s` → `.cor24.s`), not a compiler.
+
+```bash
+# Translate MSP430 assembly to COR24 assembly
+msp430-to-cor24 --entry start input.msp430.s -o output.cor24.s
+
+# Full pipeline from Rust source
+rustup run nightly cargo rustc \
+    --target msp430-none-elf \
+    -Z build-std=core --release \
+    -- --emit asm
+
+msp430-to-cor24 --entry start target/.../demo.s -o demo.cor24.s
+cor24-run --run demo.cor24.s --dump
+```
+
+### What the translator does
+
+- Maps MSP430 registers (r4-r15) to COR24 registers (r0-r2) + stack spill slots
+- Translates MSP430 instructions to COR24 equivalents
+- Remaps MSP430 I/O addresses to COR24 memory-mapped I/O
+- Passes through `@cor24:` asm comments as literal COR24 instructions
+- Generates reset vector prologue (`mov fp,sp` + `la r0,start` + `jmp (r0)`)
+
+### Pipeline demos
+
+Pre-built demos in `rust-to-cor24/demos/`:
+
+```bash
+cd rust-to-cor24/demos
+bash generate-all.sh        # Compile + translate + run all 13 demos
+bash demo_fibonacci/run.sh  # Run one specific demo
+```
+
+## File Formats
+
+| Extension | Format | Description |
+|-----------|--------|-------------|
+| `.s` | Text | COR24 assembly source (as24-compatible) |
+| `.cor24.s` | Text | COR24 assembly from translator pipeline |
+| `.msp430.s` | Text | MSP430 assembly from rustc |
+| `.lgo` | Text | Luther's "load and go" monitor format |
+| `.rs` | Text | Rust source |
+
+There is no binary object file format. The assembler produces bytes
+directly in memory — no linking step, no ELF headers, no relocations.
+COR24 programs are flat: code starts at address 0, the reset vector
+is the first few instructions.
+
+## Assembly and Loading
+
+The assembler is a two-pass assembler built into `cor24-run` and the
+Web UI. It produces a byte array that is copied directly into the
+emulator's 1 MB SRAM at address 0:
+
+```rust
+let result = assembler.assemble(source);  // → Vec<u8>
+for (addr, byte) in result.bytes.iter().enumerate() {
+    cpu.memory[addr] = *byte;             // load at address 0
+}
+cpu.pc = 0;                                // start executing
+```
+
+No separate linking or loading step. The assembler resolves all labels
+internally using two passes (first pass collects label addresses,
+second pass emits bytes with resolved references).
