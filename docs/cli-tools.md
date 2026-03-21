@@ -54,6 +54,7 @@ cor24-run --demo --speed 100000 --time 10
 | `--time <secs>` | Time limit in seconds |
 | `--max-instructions <N>` | Stop after N instructions (-1 = no limit) |
 | `--uart-input <str>` | Send characters to UART RX (supports \n, \x21) |
+| `--uart-never-ready` | UART TX stays busy forever (test that programs poll before writing) |
 | `--entry <label>` | Set entry point to label address |
 
 ## cor24-dbg — Interactive debugger

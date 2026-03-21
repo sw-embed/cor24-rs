@@ -1,5 +1,24 @@
 # Changes
 
+## 2026-03-21
+
+- Realistic UART TX busy: 10 instruction cycles per character (was 1)
+- Characters written while TX busy are dropped (not silently buffered)
+- `--uart-never-ready` CLI flag: TX never clears, polling programs hang
+- 3 new UART discipline tests (no-poll drops, poll works, never-ready hangs)
+- Assembler rejects r3-r9 register names; only r0-r2, fp, sp, z, iv, ir
+- Remove r3-r7 aliases from all docs, ISA Reference, Tutorial
+- Fix `mov r6,r0` → `mov iv,r0` in echo/echo_v2 demos
+- Fix UART status address mapping: MSP430 0xFF02 → COR24 0xFF0101
+- TX busy poll added to all 4 Rust demos (blinky, echo, panic, uart_hello)
+- Replace all "Luther Johnson" references with "MakerLisp"
+- VHS tapes re-recorded with paginated display and MP4 output
+
+## 2026-03-20
+
+- Feedback checklist with meeting notes and assembly idiom items
+- CLI tools and pipeline documentation (docs/cli-tools.md, docs/pipeline.md)
+
 ## 2026-03-19
 
 - Apply MakerLisp's assembly idiom feedback: add r0,-1 replaces lc+sub
