@@ -216,20 +216,32 @@ impl Assembler {
             }
             ".byte" => {
                 for part in &parts[1..] {
-                    if let Some(val) = self.parse_number(part.trim_matches(',')) {
-                        self.output.push(val as u8);
-                        self.address += 1;
+                    for token in part.split(',') {
+                        let token = token.trim();
+                        if token.is_empty() {
+                            continue;
+                        }
+                        if let Some(val) = self.parse_number(token) {
+                            self.output.push(val as u8);
+                            self.address += 1;
+                        }
                     }
                 }
             }
             ".word" => {
                 for part in &parts[1..] {
-                    if let Some(val) = self.parse_number(part.trim_matches(',')) {
-                        // 24-bit word, little-endian
-                        self.output.push((val & 0xFF) as u8);
-                        self.output.push(((val >> 8) & 0xFF) as u8);
-                        self.output.push(((val >> 16) & 0xFF) as u8);
-                        self.address += 3;
+                    for token in part.split(',') {
+                        let token = token.trim();
+                        if token.is_empty() {
+                            continue;
+                        }
+                        if let Some(val) = self.parse_number(token) {
+                            // 24-bit word, little-endian
+                            self.output.push((val & 0xFF) as u8);
+                            self.output.push(((val >> 8) & 0xFF) as u8);
+                            self.output.push(((val >> 16) & 0xFF) as u8);
+                            self.address += 3;
+                        }
                     }
                 }
             }
@@ -1240,6 +1252,32 @@ halt:
                 "{} as base register should be rejected", reg
             );
         }
+    }
+
+    #[test]
+    fn test_byte_comma_separated() {
+        let mut asm = Assembler::new();
+        // No spaces between values
+        let result = asm.assemble(".byte 72,101,108,108,111");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        assert_eq!(result.bytes, vec![72, 101, 108, 108, 111]);
+    }
+
+    #[test]
+    fn test_byte_comma_separated_with_spaces() {
+        let mut asm = Assembler::new();
+        // Spaces after commas (as24 style)
+        let result = asm.assemble(".byte 72, 101, 108, 108, 111");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        assert_eq!(result.bytes, vec![72, 101, 108, 108, 111]);
+    }
+
+    #[test]
+    fn test_byte_one_per_line() {
+        let mut asm = Assembler::new();
+        let result = asm.assemble(".byte 72\n.byte 101\n.byte 108");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        assert_eq!(result.bytes, vec![72, 101, 108]);
     }
 
     #[test]
