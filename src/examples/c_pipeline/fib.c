@@ -1,4 +1,4 @@
-/* Fibonacci — from Luther Johnson's COR24 C compiler */
+/* Fibonacci — from MakerLisp's COR24 C compiler */
 /* Compiled with: cc24 fib.c → as24 fib.s → COR24 assembly */
 
 int fib(int n)

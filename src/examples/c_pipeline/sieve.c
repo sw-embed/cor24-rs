@@ -1,4 +1,4 @@
-/* Sieve of Eratosthenes — from Luther Johnson's COR24 C compiler */
+/* Sieve of Eratosthenes — from MakerLisp's COR24 C compiler */
 /* Compiled with: cc24 sieve.c → as24 sieve.s → COR24 assembly */
 
 int divdec[] = { 1000, 100, 10 };
