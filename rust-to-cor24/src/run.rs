@@ -184,6 +184,7 @@ struct CliArgs {
     uart_never_ready: bool,          // UART TX never becomes ready (test polling)
     terminal: bool,                  // bridge stdin/stdout to UART
     echo: bool,                      // echo stdin to stdout in terminal mode
+    stack_kb: u32,                   // stack size in KB (3 or 8)
 }
 
 fn parse_args() -> CliArgs {
@@ -202,6 +203,7 @@ fn parse_args() -> CliArgs {
         uart_never_ready: false,
         terminal: false,
         echo: false,
+        stack_kb: 3,
     };
 
     let mut i = 1;
@@ -293,6 +295,19 @@ fn parse_args() -> CliArgs {
             }
             "--echo" => {
                 cli.echo = true;
+            }
+            "--stack-kilobytes" => {
+                if i + 1 < args.len() {
+                    match args[i + 1].parse::<u32>() {
+                        Ok(3) => cli.stack_kb = 3,
+                        Ok(8) => cli.stack_kb = 8,
+                        _ => {
+                            eprintln!("Error: --stack-kilobytes must be 3 or 8");
+                            std::process::exit(1);
+                        }
+                    }
+                    i += 1;
+                }
             }
             _ => {
                 if cli.command.is_empty() && !args[i].starts_with('-') {
@@ -736,6 +751,7 @@ fn main() {
         println!("  --entry, -e <label>  Set entry point to label address");
         println!("  --terminal           Bridge stdin/stdout to UART (interactive mode)");
         println!("  --echo               Local echo in terminal mode (for programs that don't echo)");
+        println!("  --stack-kilobytes <3|8>  EBR stack size (default: 3, max: 8)");
         println!();
         println!("Example:");
         println!("  cor24-run --demo --speed 100000 --time 10");
@@ -803,10 +819,13 @@ fn main() {
             let byte_count: usize = result.lines.iter().map(|l| l.bytes.len()).sum();
             println!("Assembled {} bytes", byte_count);
 
-            // Set entry point if specified
             let mut emu = EmulatorCore::new();
             if cli.uart_never_ready {
                 emu.set_uart_never_ready(true);
+            }
+            // Set stack size: 3 KB → SP=0xFEEC00 (default), 8 KB → SP=0xFF0000
+            if cli.stack_kb == 8 {
+                emu.set_reg(4, 0xFF0000); // SP = top of full EBR window
             }
             load_assembled(&mut emu, &result);
 
