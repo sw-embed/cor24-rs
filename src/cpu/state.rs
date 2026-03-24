@@ -820,6 +820,73 @@ mod tests {
         assert_eq!(cpu.get_reg(4), 0xFEEC00);
     }
 
+    #[test]
+    fn test_8kb_stack_push_pop_at_ff0000() {
+        let mut cpu = CpuState::new();
+        cpu.set_reg(4, 0xFF0000); // 8 KB stack: SP at top of full EBR window
+
+        // Push a word at the top of the 8 KB region
+        let val = 0xABCDEFu32;
+        let sp = cpu.get_reg(4) - 3;
+        cpu.set_reg(4, sp);
+        cpu.write_word(sp, val);
+        assert_eq!(cpu.get_reg(4), 0xFEFFFD);
+        assert_eq!(cpu.read_word(0xFEFFFD), 0xABCDEF);
+
+        // Pop it back
+        let popped = cpu.read_word(cpu.get_reg(4));
+        cpu.set_reg(4, cpu.get_reg(4) + 3);
+        assert_eq!(popped, 0xABCDEF);
+        assert_eq!(cpu.get_reg(4), 0xFF0000);
+    }
+
+    #[test]
+    fn test_8kb_stack_deep_pushes() {
+        // Verify the full 8 KB EBR region (0xFEE000-0xFEFFFF) is usable as stack
+        let mut cpu = CpuState::new();
+        cpu.set_reg(4, 0xFF0000);
+
+        // Push ~2700 words (8100 bytes > 3 KB, proving the upper 5 KB is writable)
+        let n = 2700u32;
+        for i in 0..n {
+            let sp = cpu.get_reg(4) - 3;
+            cpu.set_reg(4, sp);
+            cpu.write_word(sp, i);
+        }
+
+        // SP should be 0xFF0000 - (2700 * 3) = 0xFF0000 - 0x1F7C = 0xFEE084
+        assert_eq!(cpu.get_reg(4), 0xFF0000 - n * 3);
+        assert!(cpu.get_reg(4) >= EBR_BASE, "SP should still be within EBR");
+
+        // Verify all values pop back correctly (LIFO order)
+        for i in (0..n).rev() {
+            let popped = cpu.read_word(cpu.get_reg(4));
+            cpu.set_reg(4, cpu.get_reg(4) + 3);
+            assert_eq!(popped, i, "Stack corruption at depth {}", n - i);
+        }
+        assert_eq!(cpu.get_reg(4), 0xFF0000);
+    }
+
+    #[test]
+    fn test_8kb_stack_no_io_collision() {
+        // Writing to the top of EBR (just below 0xFF0000) must not touch I/O space
+        let mut cpu = CpuState::new();
+        cpu.set_reg(4, 0xFF0000);
+
+        // Snapshot I/O state before stack writes
+        let led_before = cpu.read_byte(0xFF0000); // button S2 default = 1 (released)
+        let uart_before = cpu.read_byte(0xFF0100);
+
+        // Push at 0xFEFFFD-0xFEFFFF (top 3 bytes of EBR)
+        let sp = cpu.get_reg(4) - 3;
+        cpu.set_reg(4, sp);
+        cpu.write_word(sp, 0xFFFFFF);
+
+        // I/O region should be unchanged
+        assert_eq!(cpu.read_byte(0xFF0000), led_before, "I/O LED register must not be corrupted by stack");
+        assert_eq!(cpu.read_byte(0xFF0100), uart_before, "I/O UART data must not be corrupted by stack");
+    }
+
     // ========== Sign Extension ==========
 
     #[test]
