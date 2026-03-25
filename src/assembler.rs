@@ -196,7 +196,7 @@ impl Assembler {
         }
     }
 
-    fn handle_directive(&mut self, directive: &str, _line_num: usize) {
+    fn handle_directive(&mut self, directive: &str, line_num: usize) {
         let parts: Vec<&str> = directive.split_whitespace().collect();
         if parts.is_empty() {
             return;
@@ -240,6 +240,24 @@ impl Assembler {
                             self.output.push((val & 0xFF) as u8);
                             self.output.push(((val >> 8) & 0xFF) as u8);
                             self.output.push(((val >> 16) & 0xFF) as u8);
+                            self.address += 3;
+                        } else if let Some(&addr) = self.labels.get(token) {
+                            // Backward label reference
+                            self.output.push((addr & 0xFF) as u8);
+                            self.output.push(((addr >> 8) & 0xFF) as u8);
+                            self.output.push(((addr >> 16) & 0xFF) as u8);
+                            self.address += 3;
+                        } else {
+                            // Forward label reference — placeholder resolved in second pass
+                            self.forward_refs.push(ForwardRef {
+                                address: self.address,
+                                label: token.to_string(),
+                                ref_type: RefType::Absolute24,
+                                line_num,
+                            });
+                            self.output.push(0x00);
+                            self.output.push(0x00);
+                            self.output.push(0x00);
                             self.address += 3;
                         }
                     }
@@ -1278,6 +1296,45 @@ halt:
         let result = asm.assemble(".byte 72\n.byte 101\n.byte 108");
         assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
         assert_eq!(result.bytes, vec![72, 101, 108]);
+    }
+
+    #[test]
+    fn test_word_backward_label() {
+        let mut asm = Assembler::new();
+        let result = asm.assemble("start:\n  mov r0,r1\n  .word start");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        // mov r0,r1 = 1 byte (0x56), then .word start = 3 bytes (address 0)
+        assert_eq!(result.bytes, vec![0x56, 0x00, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn test_word_forward_label() {
+        let mut asm = Assembler::new();
+        let result = asm.assemble(".word target\ntarget:\n  mov r0,r1");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        // .word target = 3 bytes (address 3), mov r0,r1 = 1 byte (0x56)
+        assert_eq!(result.bytes, vec![0x03, 0x00, 0x00, 0x56]);
+    }
+
+    #[test]
+    fn test_word_multiple_labels() {
+        let mut asm = Assembler::new();
+        let result = asm.assemble(
+            "a:\n  nop\nb:\n  nop\ntable:\n  .word a\n  .word b",
+        );
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        // nop=0xFF (1 byte each), a=0, b=1
+        assert_eq!(
+            result.bytes,
+            vec![0xFF, 0xFF, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]
+        );
+    }
+
+    #[test]
+    fn test_word_undefined_label() {
+        let mut asm = Assembler::new();
+        let result = asm.assemble(".word nonexistent");
+        assert!(!result.errors.is_empty(), "Should report undefined label");
     }
 
     #[test]
