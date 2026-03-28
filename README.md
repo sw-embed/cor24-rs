@@ -26,6 +26,7 @@ architecture. Written in Rust and compiled to WebAssembly.
 - **Interactive Assembly Editor** — Write and edit COR24 assembly code
 - **Step-by-Step Execution** — Debug your code instruction by instruction
 - **Multi-Region Memory Viewer** — Program, Stack, and I/O regions with change heatmaps
+- **CLI Runner** (`cor24-run`) — Assemble and run programs, load pre-assembled binaries, interactive terminal mode
 - **CLI Debugger** (`cor24-dbg`) — GDB-like command-line debugger with breakpoints, UART, and LED/button I/O
 - **LGO File Loader** — Load programs assembled with the reference `as24` toolchain
 - **Built-in Examples** — Learn from pre-loaded example programs
@@ -88,6 +89,28 @@ rust-to-cor24/demos/run-demo.sh demo_echo_v2 --uart-input 'hello!'
 
 For an overview of all the binaries and how they fit together, see **[docs/eli5.md](docs/eli5.md)**.
 
+## cor24-run CLI
+
+`cor24-run` assembles `.s` files, runs them on the emulator, and supports loading pre-assembled binaries. See `cor24-run -h` for all options or [docs/cli-tools.md](docs/cli-tools.md) for full documentation.
+
+```bash
+# Assemble and run
+cor24-run --run prog.s --dump --speed 0
+
+# Interactive terminal mode (stdin/stdout bridged to UART)
+cor24-run --run repl.s --terminal --echo --speed 0
+
+# Assemble to binary at a base address
+cor24-run --assemble lib.s lib.bin lib.lst --base-addr 0x010000
+
+# Load pre-assembled binaries (no assembly step)
+cor24-run --load-binary pvm.bin@0 --load-binary hello.p24@0x010000 \
+          --patch 0x09D7=0x010000 --entry 0 --terminal
+
+# Set button S2 state for testing
+cor24-run --run button_test.s --switch on --dump
+```
+
 ## Building
 
 ### Prerequisites
@@ -102,9 +125,6 @@ For an overview of all the binaries and how they fit together, see **[docs/eli5.
 # Serve locally with hot reload (port 7401)
 ./serve.sh
 
-# Or directly:
-trunk serve --port 7401
-
 # Open http://localhost:7401/cor24-rs/
 ```
 
@@ -112,7 +132,7 @@ trunk serve --port 7401
 
 ```bash
 # Build optimized WASM to pages/
-trunk build --release
+./build.sh --clean
 ```
 
 ## Project Structure
@@ -132,6 +152,7 @@ cor24-rs/
 │   ├── challenge.rs   # Challenge definitions
 │   ├── wasm.rs        # WASM bindings (WasmCpu wraps EmulatorCore)
 │   └── app.rs         # Yew web application
+├── rust-to-cor24/     # CLI runner (cor24-run) + MSP430→COR24 translator
 ├── cli/               # CLI debugger (cor24-dbg)
 ├── components/        # Reusable Yew UI components
 ├── tests/programs/    # Assembly test programs (.s files)
