@@ -1,5 +1,9 @@
 # MakerLisp COR24 — Assembly Emulator
 
+> **Note:** Active emulator development has moved to
+> [sw-embed/sw-cor24-emulator](https://github.com/sw-embed/sw-cor24-emulator).
+> This repository is maintained for the live demo and historical reference.
+
 A browser-based educational emulator for the
 [MakerLisp](https://makerlisp.com) COR24 (C-Oriented RISC, 24-bit)
 architecture. Written in Rust and compiled to WebAssembly.
