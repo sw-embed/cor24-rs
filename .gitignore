@@ -4,14 +4,16 @@ target/
 *.swo
 .DS_Store
 
-# Compiled objects and binaries from as24 toolchain
+# Research is a scratch area for third-party tooling — never tracked.
+docs/research/
+
+# npm/playwright tooling lives outside source control; ignore if it shows up.
+node_modules/
+package.json
+package-lock.json
+
 *.o
 *.zip
-docs/research/asld24/as24
-docs/research/asld24/cor24-as
-docs/research/asld24/cor24-ld
-docs/research/asld24/ld24
-docs/research/asld24/longlgo
 
 # Binary spreadsheets
 *.xlsx
